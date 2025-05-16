@@ -1,5 +1,5 @@
 const std = @import("std");
-const MEMORY_SIZE: usize = 65536;
+const Bus = @import("bus.zig").Bus;
 
 const Flags = struct {
     n: bool = false, // Negative
@@ -45,14 +45,21 @@ const Registers = struct {
 
 pub const CPU = struct {
     registers: Registers = .{},
-    memory: [MEMORY_SIZE]u8 = undefined,
+    bus: *Bus,
+
+    pub fn init(bus: *Bus) CPU {
+        return CPU{
+            .bus = bus,
+            .registers = Registers{},
+        };
+    }
 
     pub fn readMemory(self: *CPU, addr: u16) u8 {
-        return self.memory[addr];
+        return self.bus.read(addr);
     }
 
     pub fn writeMemory(self: *CPU, addr: u16, data: u8) void {
-        self.memory[addr] = data;
+        self.bus.write(addr, data);
     }
 
     pub fn step(self: *CPU) void {
@@ -76,11 +83,10 @@ pub const CPU = struct {
 };
 
 pub fn main() !void {
-    var cpu = CPU{};
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
 
-    cpu.memory[0x0000] = 0xA9; // LDA #$42
-    cpu.memory[0x0001] = 0x42;
-
+    bus.loadProgram(&.{ 0xA9, 0x42 }, 0x0000);
     cpu.step();
 
     std.debug.print("A: 0x{X:0>2}\n", .{cpu.registers.a});
