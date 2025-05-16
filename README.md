@@ -1,4 +1,4 @@
-# Nyxx as a 6502 emulator written in Zig
+# Nyxx – A 6502 Emulator in Zig
 
 This is a simple 6502 emulator written in Zig. It is designed to be easy to understand and modify.
 
