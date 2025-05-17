@@ -83,3 +83,25 @@ pub const Instruction = struct {
     cycles: u8,
     // exec: fn(*CPU) void — optional for function dispatch
 };
+
+pub const instruction_table = blk: {
+    const invalid_instruction = Instruction{
+        .mnemonic = Mnemonic.INVALID,
+        .addressing_mode = AddressingMode.implied,
+        .cycles = 0,
+    };
+
+    var table: [256]Instruction = .{invalid_instruction} ** 256;
+
+    table[0xA9] = .{ .mnemonic = .LDA, .addressing_mode = .immediate, .cycles = 2 };
+    table[0xAA] = .{ .mnemonic = .TAX, .addressing_mode = .implied, .cycles = 2 };
+    table[0xE8] = .{ .mnemonic = .INX, .addressing_mode = .implied, .cycles = 2 };
+    table[0xCA] = .{ .mnemonic = .DEX, .addressing_mode = .implied, .cycles = 2 };
+    table[0xC9] = .{ .mnemonic = .CMP, .addressing_mode = .immediate, .cycles = 2 };
+    table[0xA0] = .{ .mnemonic = .LDY, .addressing_mode = .immediate, .cycles = 2 };
+    table[0xA8] = .{ .mnemonic = .TAY, .addressing_mode = .implied, .cycles = 2 };
+    table[0xC8] = .{ .mnemonic = .INY, .addressing_mode = .implied, .cycles = 2 };
+    table[0x88] = .{ .mnemonic = .DEY, .addressing_mode = .implied, .cycles = 2 };
+
+    break :blk table;
+};
