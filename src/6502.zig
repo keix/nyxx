@@ -93,6 +93,7 @@ pub const CPU = struct {
             .CLC => self.opClc(),
             .SEI => self.opSei(),
             .CLI => self.opCli(),
+            .STA => self.opSta(instr.addressing_mode),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -251,6 +252,16 @@ pub const CPU = struct {
 
     inline fn opCli(self: *CPU) void {
         self.registers.flags.i = false;
+    }
+
+    inline fn opSta(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+        const addr: u16 = switch (addressing_mode) {
+            .zero_page => @as(u16, self.fetchU8()),
+            .absolute => self.fetchU16(),
+            else => unreachable,
+        };
+
+        self.writeMemory(addr, self.registers.a);
     }
 };
 
@@ -542,4 +553,26 @@ test "CLI clears interrupt disable flag" {
     cpu.step();
 
     try std.testing.expect(cpu.registers.flags.i == false);
+}
+
+test "STA stores A into zero page" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.a = 0x42;
+    bus.loadProgram(&.{ 0x85, 0x10 }, 0x0000); // STA $10
+    cpu.step();
+
+    try std.testing.expect(bus.read(0x0010) == 0x42);
+}
+
+test "STA stores A into absolute address" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.a = 0x99;
+    bus.loadProgram(&.{ 0x8D, 0x00, 0x80 }, 0x0000); // STA $8000
+    cpu.step();
+
+    try std.testing.expect(bus.read(0x8000) == 0x99);
 }
