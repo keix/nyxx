@@ -89,6 +89,10 @@ pub const CPU = struct {
             .PLA => self.opPla(),
             .PHP => self.opPhp(),
             .PLP => self.opPlp(),
+            .SEC => self.opSec(),
+            .CLC => self.opClc(),
+            .SEI => self.opSei(),
+            .CLI => self.opCli(),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -115,14 +119,6 @@ pub const CPU = struct {
         self.registers.flags.n = (value & 0x80) != 0;
     }
 
-    inline fn setCarry(self: *CPU, enabled: bool) void {
-        self.registers.flags.c = enabled;
-    }
-
-    inline fn setOverflow(self: *CPU, enabled: bool) void {
-        self.registers.flags.v = enabled;
-    }
-
     inline fn compare(self: *CPU, reg: u8, value: u8) void {
         const result = reg -% value;
         self.registers.flags.z = (reg == value);
@@ -140,6 +136,7 @@ pub const CPU = struct {
         return self.readMemory(0x0100 | @as(u16, self.registers.s));
     }
 
+    // Opcode implementations
     inline fn opLda(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
         const value = switch (addressing_mode) {
             .immediate => self.fetchU8(),
@@ -238,6 +235,22 @@ pub const CPU = struct {
     inline fn opPlp(self: *CPU) void {
         const flags = self.pop();
         self.registers.flags = Flags.fromByte(flags);
+    }
+
+    inline fn opSec(self: *CPU) void {
+        self.registers.flags.c = true;
+    }
+
+    inline fn opClc(self: *CPU) void {
+        self.registers.flags.c = false;
+    }
+
+    inline fn opSei(self: *CPU) void {
+        self.registers.flags.i = true;
+    }
+
+    inline fn opCli(self: *CPU) void {
+        self.registers.flags.i = false;
     }
 };
 
@@ -485,4 +498,48 @@ test "PLP pulls flags from stack" {
     try std.testing.expect(cpu.registers.flags.z == false);
     try std.testing.expect(cpu.registers.flags.c == true);
     try std.testing.expect(cpu.registers.s == 0xFD);
+}
+
+test "SEC sets carry flag" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.c = false;
+    bus.loadProgram(&.{0x38}, 0x0000); // SEC
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.flags.c == true);
+}
+
+test "CLC clears carry flag" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.c = true;
+    bus.loadProgram(&.{0x18}, 0x0000); // CLC
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.flags.c == false);
+}
+
+test "SEI sets interrupt disable flag" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.i = false;
+    bus.loadProgram(&.{0x78}, 0x0000); // SEI
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.flags.i == true);
+}
+
+test "CLI clears interrupt disable flag" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.i = true;
+    bus.loadProgram(&.{0x58}, 0x0000); // CLI
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.flags.i == false);
 }
