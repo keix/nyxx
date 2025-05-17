@@ -12,4 +12,4 @@ Nyxx aims to faithfully emulate the MOS 6502 CPU used in many classic systems, i
 - Exportable to WASM for web integration
 
 ## License
-MIT License. See LICENSE file for details.
+This project is licensed under the MIT License. Copyright (c) 2024 Kei Sawamura a.k.a. keix
