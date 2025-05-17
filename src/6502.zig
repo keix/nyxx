@@ -12,17 +12,19 @@ const Flags = struct {
     c: bool = false, // Carry
 
     pub fn toByte(self: Flags) u8 {
-        return (@as(u8, self.c) << 0) |
-            (@as(u8, self.z) << 1) |
-            (@as(u8, self.i) << 2) |
-            (@as(u8, self.d) << 3) |
-            (@as(u8, self.b) << 4) |
+        // Convert the flags to a byte representation
+        return (@as(u8, @intFromBool(self.c)) << 0) |
+            (@as(u8, @intFromBool(self.z)) << 1) |
+            (@as(u8, @intFromBool(self.i)) << 2) |
+            (@as(u8, @intFromBool(self.d)) << 3) |
+            (@as(u8, @intFromBool(self.b)) << 4) |
             0b00100000 | // bit 5 always set
-            (@as(u8, self.v) << 6) |
-            (@as(u8, self.n) << 7);
+            (@as(u8, @intFromBool(self.v)) << 6) |
+            (@as(u8, @intFromBool(self.n)) << 7);
     }
 
     pub fn fromByte(byte: u8) Flags {
+        // Convert a byte representation back to flags
         return Flags{
             .c = (byte & 0x01) != 0,
             .z = (byte & 0x02) != 0,
@@ -81,6 +83,13 @@ pub const CPU = struct {
             .TAY => self.opTay(),
             .INY => self.opIny(),
             .DEY => self.opDey(),
+            .BEQ => self.opBeq(),
+            .BNE => self.opBne(),
+            .PHA => self.opPha(),
+            .PLA => self.opPla(),
+            .PHP => self.opPhp(),
+            .PLP => self.opPlp(),
+            // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
             },
@@ -119,6 +128,16 @@ pub const CPU = struct {
         self.registers.flags.z = (reg == value);
         self.registers.flags.c = (reg >= value);
         self.registers.flags.n = (result & 0x80) != 0;
+    }
+
+    inline fn push(self: *CPU, value: u8) void {
+        self.writeMemory(0x0100 | @as(u16, self.registers.s), value);
+        self.registers.s -%= 1;
+    }
+
+    inline fn pop(self: *CPU) u8 {
+        self.registers.s +%= 1;
+        return self.readMemory(0x0100 | @as(u16, self.registers.s));
     }
 
     inline fn opLda(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
@@ -184,6 +203,41 @@ pub const CPU = struct {
     inline fn opDey(self: *CPU) void {
         self.registers.y -%= 1;
         self.updateZN(self.registers.y);
+    }
+
+    inline fn opBeq(self: *CPU) void {
+        const offset = @as(i8, @bitCast(self.fetchU8()));
+        if (self.registers.flags.z) {
+            self.registers.pc +%= @as(u16, @intCast(offset));
+        }
+    }
+
+    inline fn opBne(self: *CPU) void {
+        const offset = @as(i8, @bitCast(self.fetchU8()));
+        if (!self.registers.flags.z) {
+            self.registers.pc +%= @as(u16, @intCast(offset));
+        }
+    }
+
+    inline fn opPha(self: *CPU) void {
+        self.push(self.registers.a);
+    }
+
+    inline fn opPla(self: *CPU) void {
+        const value = self.pop();
+        self.registers.a = value;
+        self.updateZN(value);
+    }
+
+    inline fn opPhp(self: *CPU) void {
+        var flags = self.registers.flags.toByte();
+        flags |= 0b00110000;
+        self.push(flags);
+    }
+
+    inline fn opPlp(self: *CPU) void {
+        const flags = self.pop();
+        self.registers.flags = Flags.fromByte(flags);
     }
 };
 
@@ -300,4 +354,135 @@ test "DEY decrements Y and updates flags" {
     try std.testing.expect(cpu.registers.y == 0x00);
     try std.testing.expect(cpu.registers.flags.z == true);
     try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "BEQ branches if Z flag is set" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.z = true;
+    bus.loadProgram(&.{ 0xF0, 0x02 }, 0x0000); // BEQ +2
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.pc == 0x0002 + 0x02); // PC after fetch + offset
+}
+
+test "BEQ does not branch if Z flag is clear" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.z = false;
+    bus.loadProgram(&.{ 0xF0, 0x02 }, 0x0000); // BEQ +2
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.pc == 0x0002); // only offset fetch
+}
+
+test "BNE branches if Z flag is clear" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.z = false;
+    bus.loadProgram(&.{ 0xD0, 0x02 }, 0x0000); // BNE +2
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.pc == 0x0002 + 0x02);
+}
+
+test "BNE does not branch if Z flag is set" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.z = true;
+    bus.loadProgram(&.{ 0xD0, 0x02 }, 0x0000); // BNE +2
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.pc == 0x0002);
+}
+
+test "push writes to stack and decrements S" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.s = 0xFD;
+    cpu.push(0x42);
+
+    try std.testing.expect(cpu.registers.s == 0xFC);
+    try std.testing.expect(bus.read(0x01FD) == 0x42);
+}
+
+test "pop reads from stack and increments S" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x01FD, 0x99);
+    cpu.registers.s = 0xFC;
+    const value = cpu.pop();
+
+    try std.testing.expect(cpu.registers.s == 0xFD);
+    try std.testing.expect(value == 0x99);
+}
+
+test "PHA pushes A onto stack" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.a = 0xAB;
+    cpu.registers.s = 0xFD;
+    bus.loadProgram(&.{0x48}, 0x0000); // PHA
+    cpu.step();
+
+    try std.testing.expect(bus.read(0x01FD) == 0xAB);
+    try std.testing.expect(cpu.registers.s == 0xFC);
+}
+
+test "PLA pulls from stack into A and updates flags" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.s = 0xFC;
+    bus.write(0x01FD, 0x80); // value with negative flag
+    bus.loadProgram(&.{0x68}, 0x0000); // PLA
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.a == 0x80);
+    try std.testing.expect(cpu.registers.flags.n == true);
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.s == 0xFD);
+}
+
+test "PHP pushes processor flags onto the stack" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags = .{ .n = true, .z = true, .c = true }; // sample flags
+    cpu.registers.s = 0xFD;
+    bus.loadProgram(&.{0x08}, 0x0000); // PHP
+    cpu.step();
+
+    const pushed = bus.read(0x01FD);
+    try std.testing.expect((pushed & 0b10000000) != 0); // N
+    try std.testing.expect((pushed & 0b00000010) != 0); // Z
+    try std.testing.expect((pushed & 0b00000001) != 0); // C
+    try std.testing.expect((pushed & 0b00110000) == 0b00110000); // B + bit 5
+    try std.testing.expect(cpu.registers.s == 0xFC);
+}
+
+test "PLP pulls flags from stack" {
+    var bus = Bus.init();
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x01FD, 0b11001101); // set various flags
+    cpu.registers.s = 0xFC;
+    bus.loadProgram(&.{0x28}, 0x0000); // PLP
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.flags.n == true);
+    try std.testing.expect(cpu.registers.flags.v == true);
+    // try std.testing.expect(cpu.registers.flags.b == true);
+    try std.testing.expect(cpu.registers.flags.d == true);
+    try std.testing.expect(cpu.registers.flags.i == true);
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.c == true);
+    try std.testing.expect(cpu.registers.s == 0xFD);
 }
