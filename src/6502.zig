@@ -90,6 +90,7 @@ pub const CPU = struct {
             .INX => self.opInx(),
             .DEX => self.opDex(),
             .CMP => self.opCmp(instr.addressing_mode),
+            .LDX => self.opLdx(instr.addressing_mode),
             .LDY => self.opLdy(instr.addressing_mode),
             .TAY => self.opTay(),
             .INY => self.opIny(),
@@ -107,6 +108,7 @@ pub const CPU = struct {
             .STA => self.opSta(instr.addressing_mode),
             .STX => self.opStx(instr.addressing_mode),
             .STY => self.opSty(instr.addressing_mode),
+            .BIT => self.opBit(instr.addressing_mode),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -291,5 +293,31 @@ pub const CPU = struct {
             else => unreachable,
         };
         self.writeMemory(addr, self.registers.y);
+    }
+
+    inline fn opLdx(self: *CPU, mode: Opcode.AddressingMode) void {
+        const value = switch (mode) {
+            .immediate => self.fetchU8(),
+            .zero_page => self.readMemory(self.fetchU8()),
+            .absolute => self.readMemory(self.fetchU16()),
+            else => unreachable,
+        };
+        self.registers.x = value;
+        self.updateZN(value);
+    }
+
+    inline fn opBit(self: *CPU, mode: Opcode.AddressingMode) void {
+        const addr = switch (mode) {
+            .zero_page => self.fetchU8(),
+            .absolute => self.fetchU16(),
+            else => unreachable,
+        };
+        const value = self.readMemory(addr);
+
+        const result = self.registers.a & value;
+
+        self.registers.flags.z = (result == 0);
+        self.registers.flags.n = (value & 0b1000_0000) != 0;
+        self.registers.flags.v = (value & 0b0100_0000) != 0;
     }
 };

@@ -435,6 +435,55 @@ test "STX stores X into absolute address" {
     try std.testing.expect(bus.read(0x1234) == 0xA5);
 }
 
+test "LDX loads immediate value into X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA2, 0x10 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.step();
+
+    try std.testing.expectEqual(@as(u8, 0x10), cpu.registers.x);
+}
+
+test "BIT sets Z flag if A & M == 0" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x24, 0x10 }, 0x8000); // BIT $10
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.a = 0x00;
+    bus.write(0x0010, 0xFF);
+
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.flags.z == true);
+    try std.testing.expect(cpu.registers.flags.n == true);
+    try std.testing.expect(cpu.registers.flags.v == true);
+}
+
+test "BIT clears Z flag if A & M != 0" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x2C, 0x34, 0x12 }, 0x8000); // BIT $1234
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.a = 0x01;
+    bus.write(0x1234, 0b0100_0001); // N=0, V=1, A&M=1
+
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+    try std.testing.expect(cpu.registers.flags.v == true);
+}
+
 // Test for STA with PPU registers
 test "STA stores A into $2000 and updates PPUCTRL" {
     const allocator = std.testing.allocator;
@@ -462,4 +511,24 @@ test "STA stores A into $2001 and updates PPUMASK" {
     cpu.step();
 
     try std.testing.expectEqual(@as(u8, 0b00011111), bus.ppu.registers.mask);
+}
+
+test "BIT $2002 reflects PPU status VBlank and clears it" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x2C, 0x02, 0x20 }, 0x8000); // BIT $2002
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.ppu.registers.status = 0b1000_0000;
+
+    cpu.registers.a = 0xFF;
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true);
+    try std.testing.expect(cpu.registers.flags.v == false);
+
+    try std.testing.expect(bus.ppu.registers.status & 0x80 == 0);
 }

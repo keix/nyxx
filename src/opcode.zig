@@ -120,6 +120,9 @@ pub const instruction_table = blk: {
     table[0x8E] = .{ .mnemonic = .STX, .addressing_mode = .absolute, .cycles = 4 };
     table[0x84] = .{ .mnemonic = .STY, .addressing_mode = .zero_page, .cycles = 3 };
     table[0x8C] = .{ .mnemonic = .STY, .addressing_mode = .absolute, .cycles = 4 };
+    table[0xA2] = .{ .mnemonic = .LDX, .addressing_mode = .immediate, .cycles = 2 };
+    table[0x24] = .{ .mnemonic = .BIT, .addressing_mode = .zero_page, .cycles = 3 };
+    table[0x2C] = .{ .mnemonic = .BIT, .addressing_mode = .absolute, .cycles = 4 };
 
     break :blk table;
 };

@@ -1,4 +1,4 @@
-pub const Registers = struct {
+const Registers = struct {
     ctrl: u8 = 0, // $2000
     mask: u8 = 0, // $2001
     status: u8 = 0, // $2002
@@ -11,7 +11,6 @@ pub const Registers = struct {
 
 pub const PPU = struct {
     registers: Registers = .{},
-
     addr_latch: bool = false,
 
     pub fn init() PPU {
@@ -75,7 +74,10 @@ pub const PPU = struct {
     }
 
     fn readStatus(self: *PPU) u8 {
-        return self.registers.status;
+        const value = self.registers.status;
+        self.registers.status &= ~@as(u8, 0b1000_0000);
+        self.addr_latch = false;
+        return value;
     }
 
     fn readOamData(self: *PPU) u8 {
