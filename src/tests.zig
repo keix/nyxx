@@ -376,3 +376,59 @@ test "STA stores A into absolute RAM address" {
 
     try std.testing.expect(bus.read(0x1000) == 0x99);
 }
+
+test "STY stores Y into zero page" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x84, 0x10 }, 0x8000); // STY $10
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.y = 0x77;
+
+    cpu.step();
+
+    try std.testing.expect(bus.read(0x0010) == 0x77);
+}
+
+test "STY stores Y into absolute address" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x8C, 0x00, 0x20 }, 0x8000); // STY $2000
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.y = 0x88;
+
+    cpu.step();
+
+    try std.testing.expect(bus.read(0x2000) == 0x88);
+}
+
+test "STX stores X into zero page" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x86, 0x20 }, 0x8000); // STX $20
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.x = 0x55;
+
+    cpu.step();
+
+    try std.testing.expect(bus.read(0x0020) == 0x55);
+}
+
+test "STX stores X into absolute address" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x8E, 0x34, 0x12 }, 0x8000); // STX $1234
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.x = 0xA5;
+
+    cpu.step();
+
+    try std.testing.expect(bus.read(0x1234) == 0xA5);
+}

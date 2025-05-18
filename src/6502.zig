@@ -38,6 +38,7 @@ const Flags = struct {
 };
 
 const Registers = struct {
+    // 6502 registers
     a: u8 = 0,
     x: u8 = 0,
     y: u8 = 0,
@@ -104,6 +105,8 @@ pub const CPU = struct {
             .SEI => self.opSei(),
             .CLI => self.opCli(),
             .STA => self.opSta(instr.addressing_mode),
+            .STX => self.opStx(instr.addressing_mode),
+            .STY => self.opSty(instr.addressing_mode),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -114,14 +117,12 @@ pub const CPU = struct {
     inline fn fetchU8(self: *CPU) u8 {
         const value = self.readMemory(self.registers.pc);
         self.registers.pc +%= 1;
-
         return value;
     }
 
     inline fn fetchU16(self: *CPU) u16 {
         const low = @as(u8, self.fetchU8());
         const high = @as(u8, self.fetchU8());
-
         return (@as(u16, high) << 8) | @as(u16, low);
     }
 
@@ -272,5 +273,23 @@ pub const CPU = struct {
         };
 
         self.writeMemory(addr, self.registers.a);
+    }
+
+    inline fn opStx(self: *CPU, mode: Opcode.AddressingMode) void {
+        const addr = switch (mode) {
+            .zero_page => self.fetchU8(),
+            .absolute => self.fetchU16(),
+            else => unreachable,
+        };
+        self.writeMemory(addr, self.registers.x);
+    }
+
+    inline fn opSty(self: *CPU, mode: Opcode.AddressingMode) void {
+        const addr = switch (mode) {
+            .zero_page => self.fetchU8(),
+            .absolute => self.fetchU16(),
+            else => unreachable,
+        };
+        self.writeMemory(addr, self.registers.y);
     }
 };
