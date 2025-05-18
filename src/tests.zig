@@ -393,7 +393,8 @@ test "STY stores Y into zero page" {
 
 test "STY stores Y into absolute address" {
     const allocator = std.testing.allocator;
-    const rom = try buildTestRom(allocator, &.{ 0x8C, 0x00, 0x20 }, 0x8000); // STY $2000
+    // const rom = try buildTestRom(allocator, &.{ 0x8C, 0x00, 0x20 }, 0x8000); // STY $2000
+    const rom = try buildTestRom(allocator, &.{ 0x8C, 0x34, 0x12 }, 0x8000); // STY $1234
     defer allocator.free(rom);
 
     var bus = Bus.init(rom);
@@ -402,7 +403,8 @@ test "STY stores Y into absolute address" {
 
     cpu.step();
 
-    try std.testing.expect(bus.read(0x2000) == 0x88);
+    // try std.testing.expect(bus.read(0x2000) == 0x88);
+    try std.testing.expect(bus.read(0x1234) == 0x88);
 }
 
 test "STX stores X into zero page" {
@@ -431,4 +433,33 @@ test "STX stores X into absolute address" {
     cpu.step();
 
     try std.testing.expect(bus.read(0x1234) == 0xA5);
+}
+
+// Test for STA with PPU registers
+test "STA stores A into $2000 and updates PPUCTRL" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x8D, 0x00, 0x20 }, 0x8000); // STA $2000
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.a = 0b10100000;
+    cpu.step();
+
+    try std.testing.expectEqual(@as(u8, 0b10100000), bus.ppu.registers.ctrl);
+}
+
+test "STA stores A into $2001 and updates PPUMASK" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x8D, 0x01, 0x20 }, 0x8000); // STA $2001
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.a = 0b00011111;
+    cpu.step();
+
+    try std.testing.expectEqual(@as(u8, 0b00011111), bus.ppu.registers.mask);
 }
