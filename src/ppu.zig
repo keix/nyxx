@@ -31,67 +31,77 @@ const Status = packed struct {
 };
 
 const LoopyRegister = packed struct {
-    coarse_x: u5 = 0, // bits 0–4
-    coarse_y: u5 = 0, // bits 5–9
-    nametable: u2 = 0, // bits 10–11
-    fine_y: u3 = 0, // bits 12–14
-    unused: u1 = 0, // bit 15
+    coarse_x: u5 = 0,
+    coarse_y: u5 = 0,
+    nametable: u2 = 0,
+    fine_y: u3 = 0,
+    unused: u1 = 0,
 
-    pub fn fromU16(value: u16) LoopyRegister {
-        return @bitCast(value);
-    }
-
-    pub fn toU16(self: LoopyRegister) u16 {
+    pub fn read(self: LoopyRegister) u16 {
         return @bitCast(self);
     }
-};
 
-const Scroll = struct {
-    x: u8 = 0,
-    y: u8 = 0,
-    latch: bool = false,
-
-    pub fn write(self: *Scroll, value: u8) void {
-        if (!self.latch) {
-            self.x = value;
-        } else {
-            self.y = value;
-        }
-        self.latch = !self.latch;
-    }
-
-    pub fn resetLatch(self: *Scroll) void {
-        self.latch = false;
+    pub fn write(self: *LoopyRegister, value: u16) void {
+        self.* = @bitCast(value & 0x7FFF);
     }
 };
 
-const Addr = struct {
-    high: u8 = 0,
-    low: u8 = 0,
-    latch: bool = false,
+const ScrollUnit = struct {
+    v: LoopyRegister = .{}, // current VRAM address
+    t: LoopyRegister = .{}, // temporary VRAM address
+    x: u3 = 0, // fine X scroll (0-7)
+    w: bool = false, // write toggle
 
-    pub fn write(self: *Addr, value: u8) void {
-        if (!self.latch) {
-            self.high = value & 0x3F;
+    pub fn writeScroll(self: *ScrollUnit, value: u8) void {
+        if (!self.w) {
+            self.t.coarse_x = @truncate(value >> 3);
+            self.x = @truncate(value & 0b0000_0111);
         } else {
-            self.low = value;
+            self.t.coarse_y = @truncate(value >> 3);
+            self.t.fine_y = @truncate(value & 0b0000_0111);
         }
-        self.latch = !self.latch;
+        self.w = !self.w;
     }
 
-    pub fn read(self: Addr) u16 {
-        return (@as(u16, self.high) << 8) | self.low;
+    pub fn writeAddr(self: *ScrollUnit, value: u8) void {
+        if (!self.w) {
+            const current = self.t.read() & 0x00FF;
+            self.t.write((@as(u16, value & 0x3F) << 8) | current);
+        } else {
+            const current = self.t.read() & 0x7F00;
+            self.t.write(current | value);
+            self.v = self.t;
+        }
+        self.w = !self.w;
     }
 
-    pub fn resetLatch(self: *Addr) void {
-        self.latch = false;
+    pub fn resetLatch(self: *ScrollUnit) void {
+        self.w = false;
     }
 
-    pub fn increment(self: *Addr, delta: u16) void {
-        const current = self.read();
-        const next = (current + delta) & 0x3FFF;
-        self.high = @truncate(next >> 8);
-        self.low = @truncate(next & 0xFF);
+    pub fn incrementHorizontal(self: *ScrollUnit) void {
+        if (self.v.coarse_x == 31) {
+            self.v.coarse_x = 0;
+            self.v.nametable ^= 0b01;
+        } else {
+            self.v.coarse_x += 1;
+        }
+    }
+
+    pub fn incrementVertical(self: *ScrollUnit) void {
+        if (self.v.fine_y < 7) {
+            self.v.fine_y += 1;
+        } else {
+            self.v.fine_y = 0;
+            if (self.v.coarse_y == 29) {
+                self.v.coarse_y = 0;
+                self.v.nametable ^= 0b10;
+            } else if (self.v.coarse_y == 31) {
+                self.v.coarse_y = 0;
+            } else {
+                self.v.coarse_y += 1;
+            }
+        }
     }
 };
 
@@ -101,14 +111,12 @@ const Registers = struct {
     status: Status = @bitCast(@as(u8, 0)), // $2002
     oam_addr: u8 = 0, // $2003
     oam_data: [256]u8 = [_]u8{0} ** 256, // $2004
-    scroll: Scroll = .{}, // $2005
-    addr: Addr = .{}, // $2006
+    scroll_unit: ScrollUnit = .{}, // $2005 + $2006 + fine X scroll
     vram_buffer: u8 = 0, // $2007
 };
 
 pub const PPU = struct {
     registers: Registers = .{},
-    addr_latch: bool = false,
     vram: [0x4000]u8 = [_]u8{0} ** 0x4000, // VRAM
 
     pub fn init() PPU {
@@ -122,8 +130,8 @@ pub const PPU = struct {
             2 => {}, // read-only
             3 => self.writeOamAddr(value),
             4 => self.writeOamData(value),
-            5 => self.writeScroll(value),
-            6 => self.writeAddr(value),
+            5 => self.registers.scroll_unit.writeScroll(value),
+            6 => self.registers.scroll_unit.writeAddr(value),
             7 => self.writeData(value),
         }
     }
@@ -158,25 +166,17 @@ pub const PPU = struct {
         self.registers.scroll.write(value);
     }
 
-    fn writeAddr(self: *PPU, value: u8) void {
-        _ = value; // placeholder
-        self.addr_latch = !self.addr_latch;
-    }
-
     fn writeData(self: *PPU, value: u8) void {
-        const addr = self.registers.addr.read();
-
-        if (addr < 0x4000) {
-            self.vram[addr] = value;
-        }
+        const addr = self.registers.scroll_unit.v.read() & 0x3FFF;
+        self.vram[addr] = value;
 
         const increment: u16 = if ((self.registers.ctrl >> 2) & 0b1 == 1) 32 else 1;
-        self.registers.addr.increment(increment);
+        self.registers.scroll_unit.v.write(addr + increment);
     }
 
     fn readStatus(self: *PPU) u8 {
         const value = self.registers.status.read();
-        self.addr_latch = false;
+        self.registers.scroll_unit.resetLatch();
         return value;
     }
 
@@ -188,3 +188,38 @@ pub const PPU = struct {
         return self.registers.vram_buffer;
     }
 };
+
+const std = @import("std");
+const testing = std.testing;
+
+test "ScrollUnit writeScroll and writeAddr behavior" {
+    var su = ScrollUnit{};
+
+    su.writeScroll(0b0010_0101); // coarse_x = 4, x = 5
+    try testing.expect(su.t.coarse_x == 4);
+    try testing.expect(su.x == 5); // ← 修正
+    try testing.expect(su.w == true);
+
+    su.writeScroll(0b1101_0110); // coarse_y = 26, fine_y = 6
+    try testing.expect(su.t.coarse_y == 26);
+    try testing.expect(su.t.fine_y == 6);
+    try testing.expect(su.w == false);
+
+    su.writeAddr(0x3F);
+    try testing.expect((su.t.read() & 0x7F00) == 0x3F00);
+    try testing.expect(su.w == true);
+
+    su.writeAddr(0x21);
+    try testing.expect((su.t.read() & 0x00FF) == 0x21);
+    try testing.expect(su.v.read() == su.t.read());
+    try testing.expect(su.w == false);
+}
+
+test "ScrollUnit incrementHorizontal wraps correctly" {
+    var su = ScrollUnit{};
+    su.v.coarse_x = 31;
+    su.v.nametable = 0b00;
+    su.incrementHorizontal();
+    try testing.expect(su.v.coarse_x == 0);
+    try testing.expect(su.v.nametable == 0b01);
+}

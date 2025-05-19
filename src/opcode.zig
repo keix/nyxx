@@ -112,10 +112,15 @@ pub const instruction_table = blk: {
     table[0x18] = .{ .mnemonic = .CLC, .addressing_mode = .implied, .cycles = 2 };
     table[0x78] = .{ .mnemonic = .SEI, .addressing_mode = .implied, .cycles = 2 };
     table[0x58] = .{ .mnemonic = .CLI, .addressing_mode = .implied, .cycles = 2 };
+
     table[0x85] = .{ .mnemonic = .STA, .addressing_mode = .zero_page, .cycles = 3 };
+    table[0x95] = .{ .mnemonic = .STA, .addressing_mode = .zero_page_x, .cycles = 4 };
     table[0x8D] = .{ .mnemonic = .STA, .addressing_mode = .absolute, .cycles = 4 };
-    // table[0x95] = .{ .mnemonic = .STA, .addressing_mode = .zero_page_x, .cycles = 4 };
-    // table[0x9D] = .{ .mnemonic = .STA, .addressing_mode = .absolute_x, .cycles = 5 };
+    table[0x9D] = .{ .mnemonic = .STA, .addressing_mode = .absolute_x, .cycles = 5 };
+    table[0x99] = .{ .mnemonic = .STA, .addressing_mode = .absolute_y, .cycles = 5 };
+    table[0x81] = .{ .mnemonic = .STA, .addressing_mode = .indirect_x, .cycles = 6 };
+    table[0x91] = .{ .mnemonic = .STA, .addressing_mode = .indirect_y, .cycles = 6 };
+
     table[0x86] = .{ .mnemonic = .STX, .addressing_mode = .zero_page, .cycles = 3 };
     table[0x8E] = .{ .mnemonic = .STX, .addressing_mode = .absolute, .cycles = 4 };
     table[0x84] = .{ .mnemonic = .STY, .addressing_mode = .zero_page, .cycles = 3 };
