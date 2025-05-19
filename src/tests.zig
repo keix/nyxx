@@ -501,6 +501,22 @@ test "TXA transfers X to A and updates flags" {
     try std.testing.expect(cpu.registers.flags.n == false);
 }
 
+test "TYA transfers Y to A and updates flags" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0x98}, 0x8000); // TYA
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.y = 0xFF;
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.a == 0xFF);
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true);
+}
+
 // Test for STA with PPU registers
 test "STA stores A into $2000 and updates PPUCTRL" {
     const allocator = std.testing.allocator;

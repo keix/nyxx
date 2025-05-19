@@ -161,6 +161,7 @@ pub const instruction_table = blk: {
     table[0x2C] = .{ .mnemonic = .BIT, .addressing_mode = .absolute, .cycles = 4 };
 
     table[0x8A] = .{ .mnemonic = .TXA, .addressing_mode = .implied, .cycles = 2 };
+    table[0x98] = .{ .mnemonic = .TYA, .addressing_mode = .implied, .cycles = 2 };
 
     break :blk table;
 };

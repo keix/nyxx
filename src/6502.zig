@@ -110,6 +110,7 @@ pub const CPU = struct {
             .STY => self.opSty(instr.addressing_mode),
             .BIT => self.opBit(instr.addressing_mode),
             .TXA => self.opTxa(),
+            .TYA => self.opTya(),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -341,6 +342,11 @@ pub const CPU = struct {
 
     inline fn opTxa(self: *CPU) void {
         self.registers.a = self.registers.x;
+        self.updateZN(self.registers.a);
+    }
+
+    inline fn opTya(self: *CPU) void {
+        self.registers.a = self.registers.y;
         self.updateZN(self.registers.a);
     }
 
