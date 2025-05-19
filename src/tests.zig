@@ -1,5 +1,6 @@
 const std = @import("std");
 const CPU = @import("6502.zig").CPU;
+const PPU = @import("ppu.zig").PPU;
 const Bus = @import("bus.zig").Bus;
 
 /// Test-only helper to build a ROM image in memory
@@ -510,7 +511,7 @@ test "STA stores A into $2001 and updates PPUMASK" {
     cpu.registers.a = 0b00011111;
     cpu.step();
 
-    try std.testing.expectEqual(@as(u8, 0b00011111), bus.ppu.registers.mask);
+    try std.testing.expectEqual(@as(u8, 0b00011111), bus.ppu.registers.mask.read());
 }
 
 test "BIT $2002 reflects PPU status VBlank and clears it" {
@@ -521,7 +522,8 @@ test "BIT $2002 reflects PPU status VBlank and clears it" {
     var bus = Bus.init(rom);
     var cpu = CPU.init(&bus);
 
-    bus.ppu.registers.status = 0b1000_0000;
+    // bus.ppu.registers.status = 0b1000_0000;
+    bus.ppu.registers.status.vblank = true;
 
     cpu.registers.a = 0xFF;
     cpu.step();
@@ -530,5 +532,7 @@ test "BIT $2002 reflects PPU status VBlank and clears it" {
     try std.testing.expect(cpu.registers.flags.n == true);
     try std.testing.expect(cpu.registers.flags.v == false);
 
-    try std.testing.expect(bus.ppu.registers.status & 0x80 == 0);
+    //try std.testing.expect(bus.ppu.registers.status & 0x80 == 0);
+    const status_byte = @as(u8, @bitCast(bus.ppu.registers.status));
+    try std.testing.expect((status_byte & 0x80) == 0);
 }
