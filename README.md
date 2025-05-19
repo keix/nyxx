@@ -1,9 +1,8 @@
 # Nyxx – A 6502 Emulator in Zig
-
-This is a simple 6502 emulator written in Zig. It is designed to be easy to understand and modify.
+A minimal 6502 CPU emulator written in Zig.
 
 ## Overview
-Nyxx aims to faithfully emulate the MOS 6502 CPU used in many classic systems, including the NES. It focuses on clarity of structure, modularity, and correctness, making it ideal for learning, experimentation, or building upon for full NES emulation.
+Nyxx is designed with clarity and modularity in mind. It targets the Ricoh 2A03 — a custom variant of the MOS 6502 used in the Nintendo Entertainment System (NES). This makes Nyxx suitable for building NES emulators, tools, or educational systems that simulate 8-bit era behavior.
 
 ## Pronunciation
 Nyxx is pronounced **Nix** (`/nɪks/`), as in **Nyx**, the Greek goddess of the night. The name draws inspiration from Nyx and follows the tradition of Unix-like systems by appending an "x" to the end, forming Nyxx as a minimal, modern homage to classic systems.
@@ -15,4 +14,4 @@ Nyxx is pronounced **Nix** (`/nɪks/`), as in **Nyx**, the Greek goddess of the 
 - Exportable to WASM for web integration
 
 ## License
-This project is licensed under the MIT License. Copyright (c) 2024 Kei Sawamura a.k.a. keix
+This project is licensed under the MIT License. Copyright (c) 2025 Kei Sawamura a.k.a. keix
