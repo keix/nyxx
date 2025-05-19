@@ -157,6 +157,9 @@ pub const instruction_table = blk: {
     table[0x18] = .{ .mnemonic = .CLC, .addressing_mode = .implied, .cycles = 2 };
     table[0x58] = .{ .mnemonic = .CLI, .addressing_mode = .implied, .cycles = 2 };
 
+    table[0xBA] = .{ .mnemonic = .TSX, .addressing_mode = .implied, .cycles = 2 };
+    table[0x9A] = .{ .mnemonic = .TXS, .addressing_mode = .implied, .cycles = 2 };
+
     table[0x24] = .{ .mnemonic = .BIT, .addressing_mode = .zero_page, .cycles = 3 };
     table[0x2C] = .{ .mnemonic = .BIT, .addressing_mode = .absolute, .cycles = 4 };
 

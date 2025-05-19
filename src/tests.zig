@@ -517,6 +517,36 @@ test "TYA transfers Y to A and updates flags" {
     try std.testing.expect(cpu.registers.flags.n == true);
 }
 
+test "TSX transfers stack pointer to X and updates flags" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0xBA}, 0x8000); // TSX
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.s = 0x00;
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.x == 0x00);
+    try std.testing.expect(cpu.registers.flags.z == true);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "TXS transfers X to stack pointer" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0x9A}, 0x8000); // TXS
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.x = 0xFE;
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.s == 0xFE);
+}
+
 // Test for STA with PPU registers
 test "STA stores A into $2000 and updates PPUCTRL" {
     const allocator = std.testing.allocator;
