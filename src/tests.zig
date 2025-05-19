@@ -547,6 +547,38 @@ test "TXS transfers X to stack pointer" {
     try std.testing.expect(cpu.registers.s == 0xFE);
 }
 
+test "INC increments value at memory and sets Z/N flags" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xE6, 0x10 }, 0x8000); // INC $10
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    bus.write(0x0010, 0xFF);
+
+    cpu.step();
+
+    try std.testing.expect(bus.read(0x0010) == 0x00);
+    try std.testing.expect(cpu.registers.flags.z == true);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "DEC decrements value at memory and sets Z/N flags" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xC6, 0x10 }, 0x8000); // DEC $10
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    bus.write(0x0010, 0x01);
+
+    cpu.step();
+
+    try std.testing.expect(bus.read(0x0010) == 0x00);
+    try std.testing.expect(cpu.registers.flags.z == true);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
 // Test for STA with PPU registers
 test "STA stores A into $2000 and updates PPUCTRL" {
     const allocator = std.testing.allocator;

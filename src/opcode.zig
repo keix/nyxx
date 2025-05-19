@@ -157,6 +157,16 @@ pub const instruction_table = blk: {
     table[0x18] = .{ .mnemonic = .CLC, .addressing_mode = .implied, .cycles = 2 };
     table[0x58] = .{ .mnemonic = .CLI, .addressing_mode = .implied, .cycles = 2 };
 
+    table[0xE6] = .{ .mnemonic = .INC, .addressing_mode = .zero_page, .cycles = 5 };
+    table[0xF6] = .{ .mnemonic = .INC, .addressing_mode = .zero_page_x, .cycles = 6 };
+    table[0xEE] = .{ .mnemonic = .INC, .addressing_mode = .absolute, .cycles = 6 };
+    table[0xFE] = .{ .mnemonic = .INC, .addressing_mode = .absolute_x, .cycles = 7 };
+
+    table[0xC6] = .{ .mnemonic = .DEC, .addressing_mode = .zero_page, .cycles = 5 };
+    table[0xD6] = .{ .mnemonic = .DEC, .addressing_mode = .zero_page_x, .cycles = 6 };
+    table[0xCE] = .{ .mnemonic = .DEC, .addressing_mode = .absolute, .cycles = 6 };
+    table[0xDE] = .{ .mnemonic = .DEC, .addressing_mode = .absolute_x, .cycles = 7 };
+
     table[0xBA] = .{ .mnemonic = .TSX, .addressing_mode = .implied, .cycles = 2 };
     table[0x9A] = .{ .mnemonic = .TXS, .addressing_mode = .implied, .cycles = 2 };
 

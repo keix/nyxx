@@ -113,6 +113,8 @@ pub const CPU = struct {
             .TYA => self.opTya(),
             .TSX => self.opTsx(),
             .TXS => self.opTxs(),
+            .INC => self.opInc(instr.addressing_mode),
+            .DEC => self.opDec(instr.addressing_mode),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -161,6 +163,16 @@ pub const CPU = struct {
             else => unreachable,
         };
         self.writeMemory(addr, value);
+    }
+
+    inline fn getAddress(self: *CPU, mode: Opcode.AddressingMode) u16 {
+        return switch (mode) {
+            .zero_page => self.getZeroPage(),
+            .zero_page_x => self.getZeroPageX(),
+            .absolute => self.getAbsolute(),
+            .absolute_x => self.getAbsoluteX(),
+            else => unreachable,
+        };
     }
 
     inline fn getZeroPage(self: *CPU) u16 {
@@ -342,6 +354,22 @@ pub const CPU = struct {
         self.updateZN(value);
     }
 
+    inline fn opInc(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+        const addr = self.getAddress(addressing_mode);
+        const value = self.readMemory(addr) +% 1;
+
+        self.writeMemory(addr, value);
+        self.updateZN(value);
+    }
+
+    inline fn opDec(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+        const addr = self.getAddress(addressing_mode);
+        const value = self.readMemory(addr) -% 1;
+
+        self.writeMemory(addr, value);
+        self.updateZN(value);
+    }
+
     inline fn opTxa(self: *CPU) void {
         self.registers.a = self.registers.x;
         self.updateZN(self.registers.a);
@@ -362,13 +390,8 @@ pub const CPU = struct {
     }
 
     inline fn opBit(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
-        const addr = switch (addressing_mode) {
-            .zero_page => self.fetchU8(),
-            .absolute => self.fetchU16(),
-            else => unreachable,
-        };
+        const addr = self.getAddress(addressing_mode);
         const value = self.readMemory(addr);
-
         const result = self.registers.a & value;
 
         self.registers.flags.z = (result == 0);
