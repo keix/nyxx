@@ -223,15 +223,9 @@ pub const CPU = struct {
 
     // Opcode implementations
     inline fn opLda(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
-        const value = switch (addressing_mode) {
-            .immediate => self.fetchU8(),
-            .zero_page => self.readMemory(self.fetchU8()),
-            .absolute => self.readMemory(self.fetchU16()),
-            else => unreachable,
-        };
-
+        const value = self.readFrom(addressing_mode);
         self.registers.a = value;
-        self.updateZN(self.registers.a);
+        self.updateZN(value);
     }
 
     inline fn opTax(self: *CPU) void {
