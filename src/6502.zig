@@ -244,24 +244,12 @@ pub const CPU = struct {
     }
 
     inline fn opCmp(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
-        const value = switch (addressing_mode) {
-            .immediate => self.fetchU8(),
-            .zero_page => self.readMemory(self.fetchU8()),
-            .absolute => self.readMemory(self.fetchU16()),
-            else => unreachable,
-        };
-
+        const value = self.readFrom(addressing_mode);
         self.compare(self.registers.a, value);
     }
 
     inline fn opLdy(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
-        const value = switch (addressing_mode) {
-            .immediate => self.fetchU8(),
-            .zero_page => self.readMemory(self.fetchU8()),
-            .absolute => self.readMemory(self.fetchU16()),
-            else => unreachable,
-        };
-
+        const value = self.readFrom(addressing_mode);
         self.registers.y = value;
         self.updateZN(self.registers.y);
     }
@@ -333,45 +321,19 @@ pub const CPU = struct {
     }
 
     inline fn opSta(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
-        const addr: u16 = switch (addressing_mode) {
-            .zero_page => self.getZeroPage(),
-            .zero_page_x => self.getZeroPageX(),
-            .absolute => self.getAbsolute(),
-            .absolute_x => self.getAbsoluteX(),
-            .absolute_y => self.getAbsoluteY(),
-            .indirect_x => self.getIndirectX(),
-            .indirect_y => self.getIndirectY(),
-            else => unreachable,
-        };
-
-        self.writeMemory(addr, self.registers.a);
+        self.writeTo(addressing_mode, self.registers.a);
     }
 
     inline fn opStx(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
-        const addr = switch (addressing_mode) {
-            .zero_page => self.fetchU8(),
-            .absolute => self.fetchU16(),
-            else => unreachable,
-        };
-        self.writeMemory(addr, self.registers.x);
+        self.writeTo(addressing_mode, self.registers.x);
     }
 
     inline fn opSty(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
-        const addr = switch (addressing_mode) {
-            .zero_page => self.fetchU8(),
-            .absolute => self.fetchU16(),
-            else => unreachable,
-        };
-        self.writeMemory(addr, self.registers.y);
+        self.writeTo(addressing_mode, self.registers.y);
     }
 
     inline fn opLdx(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
-        const value = switch (addressing_mode) {
-            .immediate => self.fetchU8(),
-            .zero_page => self.readMemory(self.fetchU8()),
-            .absolute => self.readMemory(self.fetchU16()),
-            else => unreachable,
-        };
+        const value = self.readFrom(addressing_mode);
         self.registers.x = value;
         self.updateZN(value);
     }
