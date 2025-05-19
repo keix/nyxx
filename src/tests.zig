@@ -485,6 +485,22 @@ test "BIT clears Z flag if A & M != 0" {
     try std.testing.expect(cpu.registers.flags.v == true);
 }
 
+test "TXA transfers X to A and updates flags" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0x8A}, 0x8000); // TXA
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.x = 0x00;
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.a == 0x00);
+    try std.testing.expect(cpu.registers.flags.z == true);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
 // Test for STA with PPU registers
 test "STA stores A into $2000 and updates PPUCTRL" {
     const allocator = std.testing.allocator;
