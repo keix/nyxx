@@ -30,6 +30,22 @@ const Status = packed struct {
     }
 };
 
+const LoopyRegister = packed struct {
+    coarse_x: u5 = 0, // bits 0–4
+    coarse_y: u5 = 0, // bits 5–9
+    nametable: u2 = 0, // bits 10–11
+    fine_y: u3 = 0, // bits 12–14
+    unused: u1 = 0, // bit 15
+
+    pub fn fromU16(value: u16) LoopyRegister {
+        return @bitCast(value);
+    }
+
+    pub fn toU16(self: LoopyRegister) u16 {
+        return @bitCast(self);
+    }
+};
+
 const Scroll = struct {
     x: u8 = 0,
     y: u8 = 0,
