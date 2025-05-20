@@ -579,6 +579,33 @@ test "DEC decrements value at memory and sets Z/N flags" {
     try std.testing.expect(cpu.registers.flags.n == false);
 }
 
+test "JMP absolute sets PC to target" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x4C, 0x00, 0x90 }, 0x8000); // JMP $9000
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x9000);
+}
+
+test "JMP indirect uses address stored in memory (6502 page bug case)" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x6C, 0xFF, 0x00 }, 0x8000); // JMP ($00FF)
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x00FF, 0x34); // LSB
+    bus.write(0x0000, 0x12); // MSB (page wrap)
+
+    cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x1234);
+}
+
 // Test for STA with PPU registers
 test "STA stores A into $2000 and updates PPUCTRL" {
     const allocator = std.testing.allocator;

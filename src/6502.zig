@@ -67,11 +67,11 @@ pub const CPU = struct {
         self.registers.pc = (@as(u16, high) << 8) | low;
     }
 
-    pub fn readMemory(self: *CPU, addr: u16) u8 {
+    inline fn readMemory(self: *CPU, addr: u16) u8 {
         return self.bus.read(addr);
     }
 
-    pub fn writeMemory(self: *CPU, addr: u16, data: u8) void {
+    inline fn writeMemory(self: *CPU, addr: u16, data: u8) void {
         self.bus.write(addr, data);
     }
 
@@ -115,6 +115,7 @@ pub const CPU = struct {
             .TXS => self.opTxs(),
             .INC => self.opInc(instr.addressing_mode),
             .DEC => self.opDec(instr.addressing_mode),
+            .JMP => self.opJmp(instr.addressing_mode),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -129,8 +130,8 @@ pub const CPU = struct {
     }
 
     inline fn fetchU16(self: *CPU) u16 {
-        const low = @as(u8, self.fetchU8());
-        const high = @as(u8, self.fetchU8());
+        const low = self.fetchU8();
+        const high = self.fetchU8();
         return (@as(u16, high) << 8) | @as(u16, low);
     }
 
@@ -390,12 +391,27 @@ pub const CPU = struct {
     }
 
     inline fn opBit(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
-        const addr = self.getAddress(addressing_mode);
-        const value = self.readMemory(addr);
+        const value = self.readFrom(addressing_mode);
         const result = self.registers.a & value;
 
         self.registers.flags.z = (result == 0);
         self.registers.flags.n = (value & 0b1000_0000) != 0;
         self.registers.flags.v = (value & 0b0100_0000) != 0;
+    }
+
+    inline fn opJmp(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+        self.registers.pc = switch (addressing_mode) {
+            .absolute => self.getAbsolute(),
+            .indirect => blk: {
+                const ptr = self.fetchU16();
+
+                // 6502 indirect bug: if LSB == 0xFF, wrap to page start for MSB
+                const lsb = self.readMemory(ptr);
+                const msb = self.readMemory((ptr & 0xFF00) | ((ptr + 1) & 0x00FF));
+
+                break :blk (@as(u16, msb) << 8) | lsb;
+            },
+            else => unreachable,
+        };
     }
 };

@@ -142,18 +142,24 @@ pub const instruction_table = blk: {
 
     table[0xAA] = .{ .mnemonic = .TAX, .addressing_mode = .implied, .cycles = 2 };
     table[0xA8] = .{ .mnemonic = .TAY, .addressing_mode = .implied, .cycles = 2 };
+
     table[0xE8] = .{ .mnemonic = .INX, .addressing_mode = .implied, .cycles = 2 };
     table[0xC8] = .{ .mnemonic = .INY, .addressing_mode = .implied, .cycles = 2 };
+
     table[0xCA] = .{ .mnemonic = .DEX, .addressing_mode = .implied, .cycles = 2 };
     table[0x88] = .{ .mnemonic = .DEY, .addressing_mode = .implied, .cycles = 2 };
+
     table[0xF0] = .{ .mnemonic = .BEQ, .addressing_mode = .relative, .cycles = 2 };
     table[0xD0] = .{ .mnemonic = .BNE, .addressing_mode = .relative, .cycles = 2 };
+
     table[0x48] = .{ .mnemonic = .PHA, .addressing_mode = .implied, .cycles = 3 };
     table[0x68] = .{ .mnemonic = .PLA, .addressing_mode = .implied, .cycles = 4 };
     table[0x08] = .{ .mnemonic = .PHP, .addressing_mode = .implied, .cycles = 3 };
     table[0x28] = .{ .mnemonic = .PLP, .addressing_mode = .implied, .cycles = 4 };
+
     table[0x38] = .{ .mnemonic = .SEC, .addressing_mode = .implied, .cycles = 2 };
     table[0x78] = .{ .mnemonic = .SEI, .addressing_mode = .implied, .cycles = 2 };
+
     table[0x18] = .{ .mnemonic = .CLC, .addressing_mode = .implied, .cycles = 2 };
     table[0x58] = .{ .mnemonic = .CLI, .addressing_mode = .implied, .cycles = 2 };
 
@@ -175,6 +181,9 @@ pub const instruction_table = blk: {
 
     table[0x8A] = .{ .mnemonic = .TXA, .addressing_mode = .implied, .cycles = 2 };
     table[0x98] = .{ .mnemonic = .TYA, .addressing_mode = .implied, .cycles = 2 };
+
+    table[0x4C] = .{ .mnemonic = .JMP, .addressing_mode = .absolute, .cycles = 3 };
+    table[0x6C] = .{ .mnemonic = .JMP, .addressing_mode = .indirect, .cycles = 5 };
 
     break :blk table;
 };
