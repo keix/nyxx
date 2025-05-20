@@ -116,6 +116,7 @@ pub const CPU = struct {
             .INC => self.opInc(instr.addressing_mode),
             .DEC => self.opDec(instr.addressing_mode),
             .JMP => self.opJmp(instr.addressing_mode),
+            .JSR => self.opJsr(),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -174,6 +175,14 @@ pub const CPU = struct {
             .absolute_x => self.getAbsoluteX(),
             else => unreachable,
         };
+    }
+
+    inline fn peekStack(self: *CPU, offset: u8) u8 {
+        const addr = 0x0100 + @as(u16, self.registers.s) + @as(u16, offset);
+        if (addr > 0x01FF) {
+            @panic("Stack peek out of bounds");
+        }
+        return self.readMemory(addr);
     }
 
     inline fn getZeroPage(self: *CPU) u16 {
@@ -413,5 +422,15 @@ pub const CPU = struct {
             },
             else => unreachable,
         };
+    }
+
+    inline fn opJsr(self: *CPU) void {
+        const addr = self.fetchU16();
+        const return_addr = self.registers.pc - 1;
+
+        self.push(@as(u8, @truncate(return_addr >> 8)));
+        self.push(@as(u8, @truncate(return_addr & 0xFF)));
+
+        self.registers.pc = addr;
     }
 };

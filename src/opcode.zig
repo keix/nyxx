@@ -185,5 +185,7 @@ pub const instruction_table = blk: {
     table[0x4C] = .{ .mnemonic = .JMP, .addressing_mode = .absolute, .cycles = 3 };
     table[0x6C] = .{ .mnemonic = .JMP, .addressing_mode = .indirect, .cycles = 5 };
 
+    table[0x20] = .{ .mnemonic = .JSR, .addressing_mode = .absolute, .cycles = 6 };
+
     break :blk table;
 };

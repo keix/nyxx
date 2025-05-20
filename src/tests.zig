@@ -606,6 +606,30 @@ test "JMP indirect uses address stored in memory (6502 page bug case)" {
     try std.testing.expect(cpu.registers.pc == 0x1234);
 }
 
+test "JSR pushes return address and jumps" {
+    // ... existing test code ...
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x20, 0x00, 0x90 }, 0x8000); // JSR $9000
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    const initial_sp = cpu.registers.s;
+
+    cpu.step();
+
+    try std.testing.expect(cpu.registers.pc == 0x9000);
+    try std.testing.expect(cpu.registers.s == initial_sp - 2);
+
+    const low = bus.read(0x0100 + @as(u16, cpu.registers.s + 1));
+    const high = bus.read(0x0100 + @as(u16, cpu.registers.s + 2));
+
+    const return_addr = (@as(u16, high) << 8) | low;
+
+    try std.testing.expect(return_addr == 0x8002);
+}
+
 // Test for STA with PPU registers
 test "STA stores A into $2000 and updates PPUCTRL" {
     const allocator = std.testing.allocator;
