@@ -193,7 +193,7 @@ test "BEQ does not branch if Z flag is clear" {
 
 test "BEQ takes branch and crosses page boundary (+2 cycles)" {
     const allocator = std.testing.allocator;
-    const rom = try buildTestRom(allocator, &.{ 0xF0, 0x01 }, 0x80FD); // ← 修正
+    const rom = try buildTestRom(allocator, &.{ 0xF0, 0x01 }, 0x80FD);
     defer allocator.free(rom);
 
     var bus = Bus.init(rom);
@@ -233,6 +233,111 @@ test "BNE does not branch if Z flag is set" {
     _ = cpu.step();
 
     try std.testing.expect(cpu.registers.pc == 0x8000 + 0x02);
+}
+
+test "BPL branches if N flag is clear" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x10, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.n = false;
+
+    _ = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8004);
+}
+
+test "BPL does not branch if N flag is set" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x10, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.n = true;
+
+    _ = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8002);
+}
+
+test "BPL takes branch and crosses page boundary (+2 cycles)" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x10, 0x02 }, 0x80FD);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.n = false;
+
+    const cycles = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8101);
+    try std.testing.expect(cycles == 4); // base 2 + page_crossed 2
+}
+
+test "BMI branches if N flag is set" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x30, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.n = true;
+
+    _ = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8004);
+}
+
+test "BCC branches if C flag is clear" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x90, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.c = false;
+
+    _ = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8004);
+}
+
+test "BCS branches if C flag is set" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xB0, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.c = true;
+
+    _ = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8004);
+}
+
+test "BVC branches if V flag is clear" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x50, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.v = false;
+
+    _ = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8004);
+}
+
+test "BVS branches if V flag is set" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x70, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.v = true;
+
+    _ = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8004);
 }
 
 test "PHA pushes A onto stack" {

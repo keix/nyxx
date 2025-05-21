@@ -120,6 +120,12 @@ pub const CPU = struct {
             .JSR => self.opJsr(),
             .RTS => self.opRts(),
             .RTI => self.opRti(),
+            .BPL => self.opBpl(),
+            .BMI => self.opBmi(),
+            .BCC => self.opBcc(),
+            .BCS => self.opBcs(),
+            .BVC => self.opBvc(),
+            .BVS => self.opBvs(),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -153,10 +159,15 @@ pub const CPU = struct {
     inline fn calculateNextCycles(self: *CPU, instr: Opcode.Instruction) u8 {
         var extra: u8 = 0;
 
-        if (self.branch_taken) {
-            extra += if (self.page_crossed) 2 else 1;
-        } else if (instr.may_page_cross and self.page_crossed) {
-            extra += 1;
+        if (instr.may_page_cross) {
+            if (self.branch_taken) {
+                extra += 1;
+                if (self.page_crossed) {
+                    extra += 1;
+                }
+            } else if (self.page_crossed) {
+                extra += 1;
+            }
         }
 
         return instr.cycles + extra;
@@ -352,6 +363,48 @@ pub const CPU = struct {
         const base = self.registers.pc;
         const target = base +% @as(u16, @intCast(offset));
         self.branch(!self.registers.flags.z, base, target);
+    }
+
+    inline fn opBpl(self: *CPU) void {
+        const offset = @as(i8, @bitCast(self.fetchU8()));
+        const base = self.registers.pc;
+        const target = base +% @as(u16, @intCast(offset));
+        self.branch(!self.registers.flags.n, base, target);
+    }
+
+    inline fn opBmi(self: *CPU) void {
+        const offset = @as(i8, @bitCast(self.fetchU8()));
+        const base = self.registers.pc;
+        const target = base +% @as(u16, @intCast(offset));
+        self.branch(self.registers.flags.n, base, target);
+    }
+
+    inline fn opBcc(self: *CPU) void {
+        const offset = @as(i8, @bitCast(self.fetchU8()));
+        const base = self.registers.pc;
+        const target = base +% @as(u16, @intCast(offset));
+        self.branch(!self.registers.flags.c, base, target);
+    }
+
+    inline fn opBcs(self: *CPU) void {
+        const offset = @as(i8, @bitCast(self.fetchU8()));
+        const base = self.registers.pc;
+        const target = base +% @as(u16, @intCast(offset));
+        self.branch(self.registers.flags.c, base, target);
+    }
+
+    inline fn opBvc(self: *CPU) void {
+        const offset = @as(i8, @bitCast(self.fetchU8()));
+        const base = self.registers.pc;
+        const target = base +% @as(u16, @intCast(offset));
+        self.branch(!self.registers.flags.v, base, target);
+    }
+
+    inline fn opBvs(self: *CPU) void {
+        const offset = @as(i8, @bitCast(self.fetchU8()));
+        const base = self.registers.pc;
+        const target = base +% @as(u16, @intCast(offset));
+        self.branch(self.registers.flags.v, base, target);
     }
 
     inline fn opPha(self: *CPU) void {

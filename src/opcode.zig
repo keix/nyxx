@@ -152,6 +152,12 @@ pub const instruction_table = blk: {
 
     table[0xF0] = .{ .mnemonic = .BEQ, .addressing_mode = .relative, .cycles = 2, .may_page_cross = true };
     table[0xD0] = .{ .mnemonic = .BNE, .addressing_mode = .relative, .cycles = 2, .may_page_cross = true };
+    table[0x10] = .{ .mnemonic = .BPL, .addressing_mode = .relative, .cycles = 2, .may_page_cross = true };
+    table[0x30] = .{ .mnemonic = .BMI, .addressing_mode = .relative, .cycles = 2, .may_page_cross = true };
+    table[0x90] = .{ .mnemonic = .BCC, .addressing_mode = .relative, .cycles = 2, .may_page_cross = true };
+    table[0xB0] = .{ .mnemonic = .BCS, .addressing_mode = .relative, .cycles = 2, .may_page_cross = true };
+    table[0x50] = .{ .mnemonic = .BVC, .addressing_mode = .relative, .cycles = 2, .may_page_cross = true };
+    table[0x70] = .{ .mnemonic = .BVS, .addressing_mode = .relative, .cycles = 2, .may_page_cross = true };
 
     table[0x48] = .{ .mnemonic = .PHA, .addressing_mode = .implied, .cycles = 3 };
     table[0x68] = .{ .mnemonic = .PLA, .addressing_mode = .implied, .cycles = 4 };
