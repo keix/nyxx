@@ -51,6 +51,9 @@ pub const CPU = struct {
     registers: Registers = .{},
     bus: *Bus,
 
+    page_crossed: bool = false,
+    branch_taken: bool = false,
+
     pub fn init(bus: *Bus) CPU {
         var cpu = CPU{
             .bus = bus,
@@ -75,12 +78,10 @@ pub const CPU = struct {
         self.bus.write(addr, data);
     }
 
-    pub fn step(self: *CPU) void {
-        const opcode = self.fetchU8();
-        const instr = Opcode.instruction_table[opcode];
-
-        std.debug.print("PC: 0x{X:0>4}, opcode: 0x{X:0>2}\n", .{ self.registers.pc, opcode });
+    pub fn step(self: *CPU) u8 {
+        const instr = self.fetch();
         self.execute(instr);
+        return self.calculateNextCycles(instr);
     }
 
     fn execute(self: *CPU, instr: Opcode.Instruction) void {
@@ -124,6 +125,17 @@ pub const CPU = struct {
         }
     }
 
+    inline fn fetch(self: *CPU) Opcode.Instruction {
+        const opcode = self.fetchU8();
+
+        self.page_crossed = false;
+        self.branch_taken = false;
+
+        std.debug.print("PC: 0x{X:0>4}, opcode: 0x{X:0>2}\n", .{ self.registers.pc, opcode });
+
+        return Opcode.instruction_table[opcode];
+    }
+
     inline fn fetchU8(self: *CPU) u8 {
         const value = self.readMemory(self.registers.pc);
         self.registers.pc +%= 1;
@@ -134,6 +146,13 @@ pub const CPU = struct {
         const low = self.fetchU8();
         const high = self.fetchU8();
         return (@as(u16, high) << 8) | @as(u16, low);
+    }
+
+    inline fn calculateNextCycles(self: *CPU, instr: Opcode.Instruction) u8 {
+        var extra: u8 = 0;
+        if (instr.may_page_cross and self.page_crossed) extra += 1;
+        if (self.branch_taken) extra += if (self.page_crossed) 2 else 1;
+        return instr.cycles + extra;
     }
 
     inline fn readFrom(self: *CPU, mode: Opcode.AddressingMode) u8 {
@@ -202,11 +221,17 @@ pub const CPU = struct {
     }
 
     inline fn getAbsoluteX(self: *CPU) u16 {
-        return self.fetchU16() + @as(u16, self.registers.x);
+        const base = self.fetchU16();
+        const addr = base +% @as(u16, self.registers.x);
+        self.page_crossed = (base & 0xFF00) != (addr & 0xFF00);
+        return addr;
     }
 
     inline fn getAbsoluteY(self: *CPU) u16 {
-        return self.fetchU16() + @as(u16, self.registers.y);
+        const base = self.fetchU16();
+        const addr = base +% @as(u16, self.registers.y);
+        self.page_crossed = (base & 0xFF00) != (addr & 0xFF00);
+        return addr;
     }
 
     inline fn getIndirectX(self: *CPU) u16 {
@@ -216,7 +241,9 @@ pub const CPU = struct {
 
     inline fn getIndirectY(self: *CPU) u16 {
         const base = self.readU16ZP(self.fetchU8());
-        return base + @as(u16, self.registers.y);
+        const addr = base +% @as(u16, self.registers.y);
+        self.page_crossed = (base & 0xFF00) != (addr & 0xFF00);
+        return addr;
     }
 
     inline fn updateZN(self: *CPU, value: u8) void {
