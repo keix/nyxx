@@ -28,7 +28,7 @@ test "LDA loads immediate value into A and updates flags" {
     var bus = Bus.init(rom);
     var cpu = CPU.init(&bus);
 
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.a == 0x00);
     try std.testing.expect(cpu.registers.flags.z == true);
@@ -44,7 +44,7 @@ test "TAX transfers A to X" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x42;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.x == 0x42);
     try std.testing.expect(cpu.registers.flags.z == false);
@@ -60,7 +60,7 @@ test "INX increments X and updates flags" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.x = 0x7F;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.x == 0x80);
     try std.testing.expect(cpu.registers.flags.n == true);
@@ -76,7 +76,7 @@ test "DEX decrements X and sets flags" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.x = 1;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.x == 0);
     try std.testing.expect(cpu.registers.flags.z == true);
@@ -92,7 +92,7 @@ test "CMP compares A with immediate value" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x42;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.flags.z == true);
     try std.testing.expect(cpu.registers.flags.c == true);
@@ -107,7 +107,7 @@ test "LDY loads immediate value into Y" {
     var bus = Bus.init(rom);
     var cpu = CPU.init(&bus);
 
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.y == 0x7F);
     try std.testing.expect(cpu.registers.flags.z == false);
@@ -123,7 +123,7 @@ test "TAY transfers A to Y and updates flags" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x80;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.y == 0x80);
     try std.testing.expect(cpu.registers.flags.z == false);
@@ -139,7 +139,7 @@ test "INY increments Y and updates flags" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.y = 0xFF;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.y == 0x00);
     try std.testing.expect(cpu.registers.flags.z == true);
@@ -155,7 +155,7 @@ test "DEY decrements Y and updates flags" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.y = 0x01;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.y == 0x00);
     try std.testing.expect(cpu.registers.flags.z == true);
@@ -171,9 +171,10 @@ test "BEQ branches if Z flag is set" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.z = true;
-    cpu.step();
+    _ = cpu.step();
 
-    try std.testing.expect(cpu.registers.pc == 0x8000 + 0x02 + 0x02); // PC after fetch + offset
+    try std.testing.expect(cpu.registers.pc == 0x8004);
+    // try std.testing.expect(cpu.registers.pc == 0x8000 + 0x02 + 0x02); // PC after fetch + offset
 }
 
 test "BEQ does not branch if Z flag is clear" {
@@ -185,9 +186,24 @@ test "BEQ does not branch if Z flag is clear" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.z = false;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.pc == 0x8000 + 0x02); // only offset fetch
+}
+
+test "BEQ takes branch and crosses page boundary (+2 cycles)" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xF0, 0x01 }, 0x80FD);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.z = true;
+
+    const cycles = cpu.step();
+
+    try std.testing.expect(cpu.registers.pc == 0x8100); // expected jump
+    try std.testing.expect(cycles == 4); // 2 base + 2 extra (page crossed)
 }
 
 test "BNE branches if Z flag is clear" {
@@ -199,9 +215,10 @@ test "BNE branches if Z flag is clear" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.z = false;
-    cpu.step();
+    _ = cpu.step();
 
-    try std.testing.expect(cpu.registers.pc == 0x8000 + 0x02 + 0x02);
+    try std.testing.expect(cpu.registers.pc == 0x8004);
+    // try std.testing.expect(cpu.registers.pc == 0x8000 + 0x02 + 0x02);
 }
 
 test "BNE does not branch if Z flag is set" {
@@ -213,9 +230,114 @@ test "BNE does not branch if Z flag is set" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.z = true;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.pc == 0x8000 + 0x02);
+}
+
+test "BPL branches if N flag is clear" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x10, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.n = false;
+
+    _ = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8004);
+}
+
+test "BPL does not branch if N flag is set" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x10, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.n = true;
+
+    _ = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8002);
+}
+
+test "BPL takes branch and crosses page boundary (+2 cycles)" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x10, 0x02 }, 0x80FD);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.n = false;
+
+    const cycles = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8101);
+    try std.testing.expect(cycles == 4); // base 2 + page_crossed 2
+}
+
+test "BMI branches if N flag is set" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x30, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.n = true;
+
+    _ = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8004);
+}
+
+test "BCC branches if C flag is clear" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x90, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.c = false;
+
+    _ = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8004);
+}
+
+test "BCS branches if C flag is set" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xB0, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.c = true;
+
+    _ = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8004);
+}
+
+test "BVC branches if V flag is clear" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x50, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.v = false;
+
+    _ = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8004);
+}
+
+test "BVS branches if V flag is set" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x70, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.v = true;
+
+    _ = cpu.step();
+    try std.testing.expect(cpu.registers.pc == 0x8004);
 }
 
 test "PHA pushes A onto stack" {
@@ -228,7 +350,7 @@ test "PHA pushes A onto stack" {
 
     cpu.registers.a = 0xAB;
     cpu.registers.s = 0xFD;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(bus.read(0x01FD) == 0xAB);
     try std.testing.expect(cpu.registers.s == 0xFC);
@@ -244,7 +366,7 @@ test "PLA pulls from stack into A and updates flags" {
 
     cpu.registers.s = 0xFC;
     bus.write(0x01FD, 0x80); // value with negative flag
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.a == 0x80);
     try std.testing.expect(cpu.registers.flags.n == true);
@@ -262,7 +384,7 @@ test "PHP pushes processor flags onto the stack" {
 
     cpu.registers.flags = .{ .n = true, .z = true, .c = true }; // sample flags
     cpu.registers.s = 0xFD;
-    cpu.step();
+    _ = cpu.step();
 
     const pushed = bus.read(0x01FD);
     try std.testing.expect((pushed & 0b10000000) != 0); // N
@@ -282,7 +404,7 @@ test "PLP pulls flags from stack" {
 
     bus.write(0x01FD, 0b11001101); // set various flags
     cpu.registers.s = 0xFC;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.flags.n == true);
     try std.testing.expect(cpu.registers.flags.v == true);
@@ -303,7 +425,7 @@ test "SEC sets carry flag" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.c = false;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.flags.c == true);
 }
@@ -317,7 +439,7 @@ test "CLC clears carry flag" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.c = true;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.flags.c == false);
 }
@@ -331,7 +453,7 @@ test "SEI sets interrupt disable flag" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.i = false;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.flags.i == true);
 }
@@ -345,7 +467,7 @@ test "CLI clears interrupt disable flag" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.i = true;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.flags.i == false);
 }
@@ -359,7 +481,7 @@ test "STA stores A into zero page" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x42;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(bus.read(0x0010) == 0x42);
 }
@@ -373,7 +495,7 @@ test "STA stores A into absolute RAM address" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x99;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(bus.read(0x1000) == 0x99);
 }
@@ -387,7 +509,7 @@ test "STY stores Y into zero page" {
     var cpu = CPU.init(&bus);
     cpu.registers.y = 0x77;
 
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(bus.read(0x0010) == 0x77);
 }
@@ -402,7 +524,7 @@ test "STY stores Y into absolute address" {
     var cpu = CPU.init(&bus);
     cpu.registers.y = 0x88;
 
-    cpu.step();
+    _ = cpu.step();
 
     // try std.testing.expect(bus.read(0x2000) == 0x88);
     try std.testing.expect(bus.read(0x1234) == 0x88);
@@ -417,7 +539,7 @@ test "STX stores X into zero page" {
     var cpu = CPU.init(&bus);
     cpu.registers.x = 0x55;
 
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(bus.read(0x0020) == 0x55);
 }
@@ -431,7 +553,7 @@ test "STX stores X into absolute address" {
     var cpu = CPU.init(&bus);
     cpu.registers.x = 0xA5;
 
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(bus.read(0x1234) == 0xA5);
 }
@@ -444,7 +566,7 @@ test "LDX loads immediate value into X" {
     var bus = Bus.init(rom);
     var cpu = CPU.init(&bus);
 
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expectEqual(@as(u8, 0x10), cpu.registers.x);
 }
@@ -460,7 +582,7 @@ test "BIT sets Z flag if A & M == 0" {
     cpu.registers.a = 0x00;
     bus.write(0x0010, 0xFF);
 
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.flags.z == true);
     try std.testing.expect(cpu.registers.flags.n == true);
@@ -478,7 +600,7 @@ test "BIT clears Z flag if A & M != 0" {
     cpu.registers.a = 0x01;
     bus.write(0x1234, 0b0100_0001); // N=0, V=1, A&M=1
 
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.flags.z == false);
     try std.testing.expect(cpu.registers.flags.n == false);
@@ -494,7 +616,7 @@ test "TXA transfers X to A and updates flags" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.x = 0x00;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.a == 0x00);
     try std.testing.expect(cpu.registers.flags.z == true);
@@ -510,7 +632,7 @@ test "TYA transfers Y to A and updates flags" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.y = 0xFF;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.a == 0xFF);
     try std.testing.expect(cpu.registers.flags.z == false);
@@ -526,7 +648,7 @@ test "TSX transfers stack pointer to X and updates flags" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.s = 0x00;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.x == 0x00);
     try std.testing.expect(cpu.registers.flags.z == true);
@@ -542,7 +664,7 @@ test "TXS transfers X to stack pointer" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.x = 0xFE;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.s == 0xFE);
 }
@@ -556,7 +678,7 @@ test "INC increments value at memory and sets Z/N flags" {
     var cpu = CPU.init(&bus);
     bus.write(0x0010, 0xFF);
 
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(bus.read(0x0010) == 0x00);
     try std.testing.expect(cpu.registers.flags.z == true);
@@ -572,7 +694,7 @@ test "DEC decrements value at memory and sets Z/N flags" {
     var cpu = CPU.init(&bus);
     bus.write(0x0010, 0x01);
 
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(bus.read(0x0010) == 0x00);
     try std.testing.expect(cpu.registers.flags.z == true);
@@ -587,7 +709,7 @@ test "JMP absolute sets PC to target" {
     var bus = Bus.init(rom);
     var cpu = CPU.init(&bus);
 
-    cpu.step();
+    _ = cpu.step();
     try std.testing.expect(cpu.registers.pc == 0x9000);
 }
 
@@ -602,7 +724,7 @@ test "JMP indirect uses address stored in memory (6502 page bug case)" {
     bus.write(0x00FF, 0x34); // LSB
     bus.write(0x0000, 0x12); // MSB (page wrap)
 
-    cpu.step();
+    _ = cpu.step();
     try std.testing.expect(cpu.registers.pc == 0x1234);
 }
 
@@ -617,7 +739,7 @@ test "JSR pushes return address and jumps" {
 
     const initial_sp = cpu.registers.s;
 
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.pc == 0x9000);
     try std.testing.expect(cpu.registers.s == initial_sp - 2);
@@ -630,6 +752,69 @@ test "JSR pushes return address and jumps" {
     try std.testing.expect(return_addr == 0x8002);
 }
 
+test "LDA Absolute,X with page crossing increases cycles" {
+    const allocator = std.testing.allocator;
+    const program = &.{
+        0xA2, 0x01, // LDX #$01
+        0xBD, 0xFF, 0x80, // LDA $80FF,X → addr = $8100 (page crossed)
+    };
+    const rom = try buildTestRom(allocator, program, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    try std.testing.expect(cpu.step() == 2); // LDX
+    const cycles = cpu.step(); // LDA Absolute,X
+    try std.testing.expect(cycles == 5); // +1 cycle due to page crossing
+}
+
+test "RTS pulls return address and jumps to PC+1" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0x60}, 0x8000); // RTS opcode
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.s = 0xFD;
+    bus.write(0x01FE, 0x34); // low
+    bus.write(0x01FF, 0x12); // high
+
+    const cycles = cpu.step();
+
+    try std.testing.expect(cpu.registers.pc == 0x1235);
+    try std.testing.expect(cpu.registers.s == 0xFF);
+    try std.testing.expect(cycles == 6);
+}
+
+test "RTI restores flags and jumps to PC" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0x40}, 0x8000); // RTI
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.s = 0xFC;
+    bus.write(0x01FD, 0b11001101); // flags
+    bus.write(0x01FE, 0x34); // PC lo
+    bus.write(0x01FF, 0x12); // PC hi
+
+    const cycles = cpu.step();
+
+    try std.testing.expect(cpu.registers.flags.n == true);
+    try std.testing.expect(cpu.registers.flags.v == true);
+    try std.testing.expect(cpu.registers.flags.d == true);
+    try std.testing.expect(cpu.registers.flags.i == true);
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.c == true);
+
+    try std.testing.expect(cpu.registers.pc == 0x1234);
+    try std.testing.expect(cpu.registers.s == 0xFF);
+    try std.testing.expect(cycles == 6);
+}
+
 // Test for STA with PPU registers
 test "STA stores A into $2000 and updates PPUCTRL" {
     const allocator = std.testing.allocator;
@@ -640,7 +825,7 @@ test "STA stores A into $2000 and updates PPUCTRL" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0b10100000;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expectEqual(@as(u8, 0b10100000), bus.ppu.registers.ctrl);
 }
@@ -654,7 +839,7 @@ test "STA stores A into $2001 and updates PPUMASK" {
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0b00011111;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expectEqual(@as(u8, 0b00011111), bus.ppu.registers.mask.read());
 }
@@ -671,7 +856,7 @@ test "BIT $2002 reflects PPU status VBlank and clears it" {
     bus.ppu.registers.status.vblank = true;
 
     cpu.registers.a = 0xFF;
-    cpu.step();
+    _ = cpu.step();
 
     try std.testing.expect(cpu.registers.flags.z == false);
     try std.testing.expect(cpu.registers.flags.n == true);
