@@ -173,7 +173,8 @@ test "BEQ branches if Z flag is set" {
     cpu.registers.flags.z = true;
     _ = cpu.step();
 
-    try std.testing.expect(cpu.registers.pc == 0x8000 + 0x02 + 0x02); // PC after fetch + offset
+    try std.testing.expect(cpu.registers.pc == 0x8004);
+    // try std.testing.expect(cpu.registers.pc == 0x8000 + 0x02 + 0x02); // PC after fetch + offset
 }
 
 test "BEQ does not branch if Z flag is clear" {
@@ -190,6 +191,21 @@ test "BEQ does not branch if Z flag is clear" {
     try std.testing.expect(cpu.registers.pc == 0x8000 + 0x02); // only offset fetch
 }
 
+test "BEQ takes branch and crosses page boundary (+2 cycles)" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xF0, 0x01 }, 0x80FD); // ← 修正
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.flags.z = true;
+
+    const cycles = cpu.step();
+
+    try std.testing.expect(cpu.registers.pc == 0x8100); // expected jump
+    try std.testing.expect(cycles == 4); // 2 base + 2 extra (page crossed)
+}
+
 test "BNE branches if Z flag is clear" {
     const allocator = std.testing.allocator;
     const rom = try buildTestRom(allocator, &.{ 0xD0, 0x02 }, 0x8000);
@@ -201,7 +217,8 @@ test "BNE branches if Z flag is clear" {
     cpu.registers.flags.z = false;
     _ = cpu.step();
 
-    try std.testing.expect(cpu.registers.pc == 0x8000 + 0x02 + 0x02);
+    try std.testing.expect(cpu.registers.pc == 0x8004);
+    // try std.testing.expect(cpu.registers.pc == 0x8000 + 0x02 + 0x02);
 }
 
 test "BNE does not branch if Z flag is set" {
@@ -645,6 +662,52 @@ test "LDA Absolute,X with page crossing increases cycles" {
     try std.testing.expect(cpu.step() == 2); // LDX
     const cycles = cpu.step(); // LDA Absolute,X
     try std.testing.expect(cycles == 5); // +1 cycle due to page crossing
+}
+
+test "RTS pulls return address and jumps to PC+1" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0x60}, 0x8000); // RTS opcode
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.s = 0xFD;
+    bus.write(0x01FE, 0x34); // low
+    bus.write(0x01FF, 0x12); // high
+
+    const cycles = cpu.step();
+
+    try std.testing.expect(cpu.registers.pc == 0x1235);
+    try std.testing.expect(cpu.registers.s == 0xFF);
+    try std.testing.expect(cycles == 6);
+}
+
+test "RTI restores flags and jumps to PC" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0x40}, 0x8000); // RTI
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.s = 0xFC;
+    bus.write(0x01FD, 0b11001101); // flags
+    bus.write(0x01FE, 0x34); // PC lo
+    bus.write(0x01FF, 0x12); // PC hi
+
+    const cycles = cpu.step();
+
+    try std.testing.expect(cpu.registers.flags.n == true);
+    try std.testing.expect(cpu.registers.flags.v == true);
+    try std.testing.expect(cpu.registers.flags.d == true);
+    try std.testing.expect(cpu.registers.flags.i == true);
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.c == true);
+
+    try std.testing.expect(cpu.registers.pc == 0x1234);
+    try std.testing.expect(cpu.registers.s == 0xFF);
+    try std.testing.expect(cycles == 6);
 }
 
 // Test for STA with PPU registers

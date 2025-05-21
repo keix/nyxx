@@ -48,7 +48,7 @@ const Registers = struct {
 };
 
 pub const CPU = struct {
-    registers: Registers = .{},
+    registers: Registers,
     bus: *Bus,
 
     page_crossed: bool = false,
@@ -118,6 +118,8 @@ pub const CPU = struct {
             .DEC => self.opDec(instr.addressing_mode),
             .JMP => self.opJmp(instr.addressing_mode),
             .JSR => self.opJsr(),
+            .RTS => self.opRts(),
+            .RTI => self.opRti(),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -150,9 +152,25 @@ pub const CPU = struct {
 
     inline fn calculateNextCycles(self: *CPU, instr: Opcode.Instruction) u8 {
         var extra: u8 = 0;
-        if (instr.may_page_cross and self.page_crossed) extra += 1;
-        if (self.branch_taken) extra += if (self.page_crossed) 2 else 1;
+
+        if (self.branch_taken) {
+            extra += if (self.page_crossed) 2 else 1;
+        } else if (instr.may_page_cross and self.page_crossed) {
+            extra += 1;
+        }
+
         return instr.cycles + extra;
+    }
+
+    inline fn branch(self: *CPU, condition: bool, base: u16, target: u16) void {
+        if (condition) {
+            self.branch_taken = true;
+            self.page_crossed = (base & 0xFF00) != (target & 0xFF00);
+            self.registers.pc = target;
+        } else {
+            self.branch_taken = false;
+            self.page_crossed = false;
+        }
     }
 
     inline fn readFrom(self: *CPU, mode: Opcode.AddressingMode) u8 {
@@ -324,16 +342,16 @@ pub const CPU = struct {
 
     inline fn opBeq(self: *CPU) void {
         const offset = @as(i8, @bitCast(self.fetchU8()));
-        if (self.registers.flags.z) {
-            self.registers.pc +%= @as(u16, @intCast(offset));
-        }
+        const base = self.registers.pc;
+        const target = base +% @as(u16, @intCast(offset));
+        self.branch(self.registers.flags.z, base, target);
     }
 
     inline fn opBne(self: *CPU) void {
         const offset = @as(i8, @bitCast(self.fetchU8()));
-        if (!self.registers.flags.z) {
-            self.registers.pc +%= @as(u16, @intCast(offset));
-        }
+        const base = self.registers.pc;
+        const target = base +% @as(u16, @intCast(offset));
+        self.branch(!self.registers.flags.z, base, target);
     }
 
     inline fn opPha(self: *CPU) void {
@@ -459,5 +477,21 @@ pub const CPU = struct {
         self.push(@as(u8, @truncate(return_addr & 0xFF)));
 
         self.registers.pc = addr;
+    }
+
+    inline fn opRts(self: *CPU) void {
+        const low = self.pop();
+        const high = self.pop();
+        const addr = (@as(u16, high) << 8) | @as(u16, low);
+        self.registers.pc = addr + 1;
+    }
+
+    inline fn opRti(self: *CPU) void {
+        const flags = self.pop();
+        self.registers.flags = Flags.fromByte(flags);
+
+        const low = self.pop();
+        const high = self.pop();
+        self.registers.pc = (@as(u16, high) << 8) | @as(u16, low);
     }
 };
