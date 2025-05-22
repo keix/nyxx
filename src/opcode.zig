@@ -196,5 +196,23 @@ pub const instruction_table = blk: {
     table[0x60] = .{ .mnemonic = .RTS, .addressing_mode = .implied, .cycles = 6 };
     table[0x40] = .{ .mnemonic = .RTI, .addressing_mode = .implied, .cycles = 6 };
 
+    table[0x69] = .{ .mnemonic = .ADC, .addressing_mode = .immediate, .cycles = 2 };
+    table[0x65] = .{ .mnemonic = .ADC, .addressing_mode = .zero_page, .cycles = 3 };
+    table[0x75] = .{ .mnemonic = .ADC, .addressing_mode = .zero_page_x, .cycles = 4 };
+    table[0x6D] = .{ .mnemonic = .ADC, .addressing_mode = .absolute, .cycles = 4 };
+    table[0x7D] = .{ .mnemonic = .ADC, .addressing_mode = .absolute_x, .cycles = 4, .may_page_cross = true };
+    table[0x79] = .{ .mnemonic = .ADC, .addressing_mode = .absolute_y, .cycles = 4, .may_page_cross = true };
+    table[0x61] = .{ .mnemonic = .ADC, .addressing_mode = .indirect_x, .cycles = 6 };
+    table[0x71] = .{ .mnemonic = .ADC, .addressing_mode = .indirect_y, .cycles = 5, .may_page_cross = true };
+
+    table[0xE9] = .{ .mnemonic = .SBC, .addressing_mode = .immediate, .cycles = 2 };
+    table[0xE5] = .{ .mnemonic = .SBC, .addressing_mode = .zero_page, .cycles = 3 };
+    table[0xF5] = .{ .mnemonic = .SBC, .addressing_mode = .zero_page_x, .cycles = 4 };
+    table[0xED] = .{ .mnemonic = .SBC, .addressing_mode = .absolute, .cycles = 4 };
+    table[0xFD] = .{ .mnemonic = .SBC, .addressing_mode = .absolute_x, .cycles = 4, .may_page_cross = true };
+    table[0xF9] = .{ .mnemonic = .SBC, .addressing_mode = .absolute_y, .cycles = 4, .may_page_cross = true };
+    table[0xE1] = .{ .mnemonic = .SBC, .addressing_mode = .indirect_x, .cycles = 6 };
+    table[0xF1] = .{ .mnemonic = .SBC, .addressing_mode = .indirect_y, .cycles = 5, .may_page_cross = true };
+
     break :blk table;
 };

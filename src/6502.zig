@@ -18,7 +18,7 @@ const Flags = struct {
             (@as(u8, @intFromBool(self.i)) << 2) |
             (@as(u8, @intFromBool(self.d)) << 3) |
             (@as(u8, @intFromBool(self.b)) << 4) |
-            0b00100000 | // bit 5 always set
+            (0b00100000) | // bit 5 always set
             (@as(u8, @intFromBool(self.v)) << 6) |
             (@as(u8, @intFromBool(self.n)) << 7);
     }
@@ -26,13 +26,13 @@ const Flags = struct {
     pub fn fromByte(byte: u8) Flags {
         // Convert a byte representation back to flags
         return Flags{
-            .c = (byte & 0x01) != 0,
-            .z = (byte & 0x02) != 0,
-            .i = (byte & 0x04) != 0,
-            .d = (byte & 0x08) != 0,
-            .b = (byte & 0x10) != 0,
-            .v = (byte & 0x40) != 0,
-            .n = (byte & 0x80) != 0,
+            .c = (byte & 0x01) != 0, // Carry flag
+            .z = (byte & 0x02) != 0, // Zero flag
+            .i = (byte & 0x04) != 0, // Interrupt flag
+            .d = (byte & 0x08) != 0, // Decimal flag is not used in NES
+            .b = false, // Break flag is not used in NES
+            .v = (byte & 0x40) != 0, // Overflow flag
+            .n = (byte & 0x80) != 0, // Negative flag
         };
     }
 };
@@ -126,6 +126,8 @@ pub const CPU = struct {
             .BCS => self.opBcs(),
             .BVC => self.opBvc(),
             .BVS => self.opBvs(),
+            .ADC => self.opAdc(instr.addressing_mode),
+            .SBC => self.opSbc(instr.addressing_mode),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -546,5 +548,34 @@ pub const CPU = struct {
         const low = self.pop();
         const high = self.pop();
         self.registers.pc = (@as(u16, high) << 8) | @as(u16, low);
+    }
+
+    inline fn opAdc(self: *CPU, mode: Opcode.AddressingMode) void {
+        const value = self.readFrom(mode);
+        const a = self.registers.a;
+        const c = @as(u8, @intFromBool(self.registers.flags.c));
+
+        const sum = @as(u16, a) + @as(u16, value) + @as(u16, c);
+        const result = @as(u8, @truncate(sum));
+
+        self.registers.flags.c = sum > 0xFF;
+        self.registers.flags.z = result == 0;
+        self.registers.flags.n = (result & 0x80) != 0;
+        self.registers.flags.v = ((~(a ^ value)) & (a ^ result) & 0x80) != 0;
+
+        self.registers.a = result;
+    }
+
+    inline fn opSbc(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+        const original_value = self.readFrom(addressing_mode);
+        const value = original_value ^ 0xFF;
+        const carry = @as(u8, @intFromBool(self.registers.flags.c));
+        const result = self.registers.a +% value + carry;
+
+        self.registers.flags.c = (@as(u16, self.registers.a) + @as(u16, value) + carry) > 0xFF;
+        self.registers.flags.v = ((self.registers.a ^ result) & (original_value ^ result) & 0x80) != 0;
+
+        self.registers.a = result;
+        self.updateZN(result);
     }
 };

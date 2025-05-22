@@ -174,7 +174,6 @@ test "BEQ branches if Z flag is set" {
     _ = cpu.step();
 
     try std.testing.expect(cpu.registers.pc == 0x8004);
-    // try std.testing.expect(cpu.registers.pc == 0x8000 + 0x02 + 0x02); // PC after fetch + offset
 }
 
 test "BEQ does not branch if Z flag is clear" {
@@ -218,7 +217,6 @@ test "BNE branches if Z flag is clear" {
     _ = cpu.step();
 
     try std.testing.expect(cpu.registers.pc == 0x8004);
-    // try std.testing.expect(cpu.registers.pc == 0x8000 + 0x02 + 0x02);
 }
 
 test "BNE does not branch if Z flag is set" {
@@ -408,7 +406,6 @@ test "PLP pulls flags from stack" {
 
     try std.testing.expect(cpu.registers.flags.n == true);
     try std.testing.expect(cpu.registers.flags.v == true);
-    // try std.testing.expect(cpu.registers.flags.b == true);
     try std.testing.expect(cpu.registers.flags.d == true);
     try std.testing.expect(cpu.registers.flags.i == true);
     try std.testing.expect(cpu.registers.flags.z == false);
@@ -516,7 +513,6 @@ test "STY stores Y into zero page" {
 
 test "STY stores Y into absolute address" {
     const allocator = std.testing.allocator;
-    // const rom = try buildTestRom(allocator, &.{ 0x8C, 0x00, 0x20 }, 0x8000); // STY $2000
     const rom = try buildTestRom(allocator, &.{ 0x8C, 0x34, 0x12 }, 0x8000); // STY $1234
     defer allocator.free(rom);
 
@@ -526,7 +522,6 @@ test "STY stores Y into absolute address" {
 
     _ = cpu.step();
 
-    // try std.testing.expect(bus.read(0x2000) == 0x88);
     try std.testing.expect(bus.read(0x1234) == 0x88);
 }
 
@@ -729,7 +724,6 @@ test "JMP indirect uses address stored in memory (6502 page bug case)" {
 }
 
 test "JSR pushes return address and jumps" {
-    // ... existing test code ...
     const allocator = std.testing.allocator;
     const rom = try buildTestRom(allocator, &.{ 0x20, 0x00, 0x90 }, 0x8000); // JSR $9000
     defer allocator.free(rom);
@@ -815,6 +809,238 @@ test "RTI restores flags and jumps to PC" {
     try std.testing.expect(cycles == 6);
 }
 
+test "ADC immediate adds correctly without carry or overflow" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x69, 0x10 }, 0x8000); // ADC #$10
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.a = 0x20;
+    cpu.registers.flags.c = false;
+
+    const cycles = cpu.step();
+
+    try std.testing.expect(cpu.registers.a == 0x30);
+    try std.testing.expect(cpu.registers.flags.c == false);
+    try std.testing.expect(cpu.registers.flags.v == false);
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+    try std.testing.expect(cycles == 2);
+}
+
+test "ADC zero page" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x65, 0x10 }, 0x8000); // ADC $10
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    bus.write(0x0010, 0x05);
+
+    cpu.registers.a = 0x03;
+    cpu.registers.flags.c = false;
+
+    _ = cpu.step();
+
+    try std.testing.expect(cpu.registers.a == 0x08);
+}
+
+test "ADC zero page,X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x75, 0x10 }, 0x8000); // ADC $10,X
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.x = 0x01;
+    bus.write(0x0011, 0x02);
+
+    cpu.registers.a = 0x01;
+    _ = cpu.step();
+
+    try std.testing.expect(cpu.registers.a == 0x03);
+}
+
+test "ADC absolute" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x6D, 0x34, 0x12 }, 0x8000); // ADC $1234
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    bus.write(0x1234, 0x10);
+
+    cpu.registers.a = 0x01;
+    _ = cpu.step();
+
+    try std.testing.expect(cpu.registers.a == 0x11);
+}
+
+test "ADC absolute,X with page crossing (in RAM)" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x7D, 0xFF, 0x00 }, 0x8000); // ADC $00FF,X
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.x = 0x01;
+    cpu.registers.a = 0x01;
+    bus.write(0x0100, 0x01);
+
+    const cycles = cpu.step();
+
+    try std.testing.expect(cpu.registers.a == 0x02);
+    try std.testing.expect(cycles == 5);
+}
+
+test "ADC absolute,Y" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x79, 0x00, 0x02 }, 0x8000); // ADC $0200,Y
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.a = 0x03;
+    cpu.registers.y = 0x01;
+    bus.write(0x0201, 0x02); // 0x0200 + Y = 0x0201
+
+    const cycles = cpu.step();
+    try std.testing.expect(cpu.registers.a == 0x05);
+    try std.testing.expect(cycles == 4);
+}
+
+test "ADC indirect,Y" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x71, 0x10 }, 0x8000); // ADC ($10),Y
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // ($10) = 0x0200, Y = 1 → target = 0x0201
+    bus.write(0x0010, 0x00); // low byte
+    bus.write(0x0011, 0x02); // high byte
+    bus.write(0x0201, 0x02); // target address
+
+    cpu.registers.a = 0x03;
+    cpu.registers.y = 0x01;
+
+    const cycles = cpu.step();
+    try std.testing.expect(cpu.registers.a == 0x05);
+    try std.testing.expect(cycles == 5);
+}
+
+test "SBC absolute" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xED, 0x03, 0x80, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.a = 0x05;
+    cpu.registers.flags.c = true;
+
+    const cycles = cpu.step();
+    try std.testing.expect(cpu.registers.a == 0x03);
+    try std.testing.expect(cycles == 4);
+}
+
+test "SBC absolute,X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xFD, 0x04, 0x80, 0x00, 0x00, 0x00, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+    cpu.registers.a = 0x05;
+    cpu.registers.x = 0x02;
+    cpu.registers.flags.c = true;
+
+    const cycles = cpu.step();
+    try std.testing.expect(cpu.registers.a == 0x03);
+    try std.testing.expect(cycles == 4);
+}
+
+test "SBC zero page" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xE5, 0x10 }, 0x8000); // SBC $10
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0010, 0x02);
+
+    cpu.registers.a = 0x05;
+    cpu.registers.flags.c = true;
+
+    const cycles = cpu.step();
+    try std.testing.expect(cpu.registers.a == 0x03); // 0x05 - 0x02 = 0x03
+    try std.testing.expect(cycles == 3);
+}
+
+test "SBC zero page,X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xF5, 0x10 }, 0x8000); // SBC $10,X
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.x = 0x01;
+    bus.write(0x0011, 0x01);
+
+    cpu.registers.a = 0x05;
+    cpu.registers.flags.c = true;
+
+    const cycles = cpu.step();
+    try std.testing.expect(cpu.registers.a == 0x04); // 0x05 - 0x01 = 0x04
+    try std.testing.expect(cycles == 4);
+}
+
+test "SBC indirect,Y" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xF1, 0x10 }, 0x8000); // SBC ($10),Y
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Setup: ($10) = 0x0200, Y = 1 → effective = 0x0201
+    bus.write(0x0010, 0x00); // low byte of base address
+    bus.write(0x0011, 0x02); // high byte of base address
+    bus.write(0x0201, 0x01); // value at effective address
+
+    cpu.registers.a = 0x05;
+    cpu.registers.y = 0x01;
+    cpu.registers.flags.c = true; // no borrow
+
+    const cycles = cpu.step();
+    try std.testing.expect(cpu.registers.a == 0x04); // 0x05 - 0x01 = 0x04
+    try std.testing.expect(cycles == 5);
+}
+
+test "SBC immediate" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xE9, 0x02 }, 0x8000); // SBC #$02
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.a = 0x05;
+    cpu.registers.flags.c = true; // no borrow
+
+    const cycles = cpu.step();
+    try std.testing.expect(cpu.registers.a == 0x03); // 0x05 - 0x02 = 0x03
+    try std.testing.expect(cycles == 2);
+}
+
 // Test for STA with PPU registers
 test "STA stores A into $2000 and updates PPUCTRL" {
     const allocator = std.testing.allocator;
@@ -852,7 +1078,6 @@ test "BIT $2002 reflects PPU status VBlank and clears it" {
     var bus = Bus.init(rom);
     var cpu = CPU.init(&bus);
 
-    // bus.ppu.registers.status = 0b1000_0000;
     bus.ppu.registers.status.vblank = true;
 
     cpu.registers.a = 0xFF;
@@ -862,7 +1087,6 @@ test "BIT $2002 reflects PPU status VBlank and clears it" {
     try std.testing.expect(cpu.registers.flags.n == true);
     try std.testing.expect(cpu.registers.flags.v == false);
 
-    //try std.testing.expect(bus.ppu.registers.status & 0x80 == 0);
     const status_byte = @as(u8, @bitCast(bus.ppu.registers.status));
     try std.testing.expect((status_byte & 0x80) == 0);
 }
