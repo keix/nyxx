@@ -128,6 +128,8 @@ pub const CPU = struct {
             .BVS => self.opBvs(),
             .ADC => self.opAdc(instr.addressing_mode),
             .SBC => self.opSbc(instr.addressing_mode),
+            .AND => self.opAnd(instr.addressing_mode),
+            .ORA => self.opOra(instr.addressing_mode),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -577,5 +579,17 @@ pub const CPU = struct {
 
         self.registers.a = result;
         self.updateZN(result);
+    }
+
+    inline fn opAnd(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+        const value = self.readFrom(addressing_mode);
+        self.registers.a &= value;
+        self.updateZN(self.registers.a);
+    }
+
+    inline fn opOra(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+        const value = self.readFrom(addressing_mode);
+        self.registers.a |= value;
+        self.updateZN(self.registers.a);
     }
 };

@@ -1041,6 +1041,581 @@ test "SBC immediate" {
     try std.testing.expect(cycles == 2);
 }
 
+test "AND immediate updates A and flags" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0xCC, 0x29, 0x0F }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$CC
+    try std.testing.expect(cpu.registers.a == 0xCC);
+
+    _ = cpu.step(); // AND #$0F
+    try std.testing.expect(cpu.registers.a == 0x0C);
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "AND zero result sets zero flag" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x0F, 0x29, 0xF0 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$0F
+    _ = cpu.step(); // AND #$F0
+
+    try std.testing.expect(cpu.registers.a == 0x00);
+    try std.testing.expect(cpu.registers.flags.z == true);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "AND result sets negative flag" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0xF0, 0x29, 0xF0 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$F0
+    _ = cpu.step(); // AND #$F0
+
+    try std.testing.expect(cpu.registers.a == 0xF0);
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true);
+}
+
+test "AND zero page" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0xFF, 0x25, 0x10 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0010, 0x0F);
+
+    _ = cpu.step(); // LDA #$FF
+    _ = cpu.step(); // AND $10
+
+    try std.testing.expect(cpu.registers.a == 0x0F);
+}
+
+test "AND absolute,X with page crossing" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA2, 0x01, // LDX #$01
+        0xA9, 0xFF, // LDA #$FF
+        0x3D, 0xFF,
+        0x00, // AND $00FF,X (→ $0100, page crossed)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0100, 0x0F); // Store test value at target address
+
+    _ = cpu.step(); // LDX #$01
+    _ = cpu.step(); // LDA #$FF
+    const cycles = cpu.step(); // AND $00FF,X
+
+    try std.testing.expect(cpu.registers.a == 0x0F);
+    try std.testing.expect(cycles == 5); // +1 cycle for page crossing
+}
+
+test "AND absolute,Y with page crossing" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA0, 0x02, // LDY #$02
+        0xA9, 0xAA, // LDA #$AA
+        0x39, 0xFE,
+        0x00, // AND $00FE,Y (→ $0100, page crossed)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0100, 0x55); // Store test value
+
+    _ = cpu.step(); // LDY #$02
+    _ = cpu.step(); // LDA #$AA
+    const cycles = cpu.step(); // AND $00FE,Y
+
+    try std.testing.expect(cpu.registers.a == 0x00); // 0xAA & 0x55 = 0x00
+    try std.testing.expect(cpu.registers.flags.z == true);
+    try std.testing.expect(cycles == 5); // +1 cycle for page crossing
+}
+
+test "AND zero page,X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA2, 0x05, // LDX #$05
+        0xA9, 0x3C, // LDA #$3C
+        0x35, 0x10, // AND $10,X (→ $15)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0015, 0x18); // Store test value at $15
+
+    _ = cpu.step(); // LDX #$05
+    _ = cpu.step(); // LDA #$3C
+    _ = cpu.step(); // AND $10,X
+
+    try std.testing.expect(cpu.registers.a == 0x18); // 0x3C & 0x18 = 0x18
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "AND indirect,X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA2, 0x04, // LDX #$04
+        0xA9, 0xF0, // LDA #$F0
+        0x21, 0x20, // AND ($20,X) → ($24)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Setup indirect address at $24-$25
+    bus.write(0x0024, 0x00); // Low byte of target address
+    bus.write(0x0025, 0x02); // High byte of target address → $0200
+    bus.write(0x0200, 0x33); // Value at target address
+
+    _ = cpu.step(); // LDX #$04
+    _ = cpu.step(); // LDA #$F0
+    _ = cpu.step(); // AND ($20,X)
+
+    try std.testing.expect(cpu.registers.a == 0x30); // 0xF0 & 0x33 = 0x30
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "AND indirect,Y" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA0, 0x03, // LDY #$03
+        0xA9, 0xCC, // LDA #$CC
+        0x31, 0x40, // AND ($40),Y
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Setup base address at $40-$41
+    bus.write(0x0040, 0x00); // Low byte → $0300
+    bus.write(0x0041, 0x03); // High byte
+    // Effective address: $0300 + Y($03) = $0303
+    bus.write(0x0303, 0x99); // Value at effective address
+
+    _ = cpu.step(); // LDY #$03
+    _ = cpu.step(); // LDA #$CC
+    _ = cpu.step(); // AND ($40),Y
+
+    try std.testing.expect(cpu.registers.a == 0x88); // 0xCC & 0x99 = 0x88
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true); // bit 7 set
+}
+
+test "AND all addressing modes consistency" {
+    const allocator = std.testing.allocator;
+
+    // Test that all addressing modes produce the same result for the same operands
+    const test_value = 0x96; // 10010110
+    const mask = 0x5A; // 01011010
+    const expected = 0x12; // 00010010
+
+    // Immediate mode
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, test_value, // LDA #$96
+            0x29, mask, // AND #$5A
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // AND
+        try std.testing.expect(cpu.registers.a == expected);
+    }
+
+    // Zero page mode
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, test_value, // LDA #$96
+            0x25, 0x50, // AND $50
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x0050, mask);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // AND
+        try std.testing.expect(cpu.registers.a == expected);
+    }
+
+    // Absolute mode
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, test_value, // LDA #$96
+            0x2D, 0x00,
+            0x03, // AND $0300
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x0300, mask);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // AND
+        try std.testing.expect(cpu.registers.a == expected);
+    }
+}
+
+test "AND edge cases" {
+    const allocator = std.testing.allocator;
+
+    // Test AND with 0x00 (should always result in 0)
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, 0xFF, // LDA #$FF
+            0x29, 0x00, // AND #$00
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // AND
+        try std.testing.expect(cpu.registers.a == 0x00);
+        try std.testing.expect(cpu.registers.flags.z == true);
+    }
+
+    // Test AND with 0xFF (should preserve original value)
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, 0x42, // LDA #$42
+            0x29, 0xFF, // AND #$FF
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // AND
+        try std.testing.expect(cpu.registers.a == 0x42);
+        try std.testing.expect(cpu.registers.flags.z == false);
+        try std.testing.expect(cpu.registers.flags.n == false);
+    }
+
+    // Test AND with same value (should preserve original)
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, 0x81, // LDA #$81
+            0x29, 0x81, // AND #$81
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // AND
+        try std.testing.expect(cpu.registers.a == 0x81);
+        try std.testing.expect(cpu.registers.flags.z == false);
+        try std.testing.expect(cpu.registers.flags.n == true); // bit 7 set
+    }
+}
+
+test "ORA immediate updates A and flags" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x0C, 0x09, 0x03 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$0C (00001100)
+    try std.testing.expect(cpu.registers.a == 0x0C);
+
+    _ = cpu.step(); // ORA #$03 (00000011)
+    try std.testing.expect(cpu.registers.a == 0x0F); // 00001111
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "ORA zero value preserves original" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x42, 0x09, 0x00 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$42
+    _ = cpu.step(); // ORA #$00
+
+    try std.testing.expect(cpu.registers.a == 0x42);
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "ORA sets negative flag" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x70, 0x09, 0x80 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$70 (01110000)
+    _ = cpu.step(); // ORA #$80 (10000000)
+
+    try std.testing.expect(cpu.registers.a == 0xF0); // 11110000
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true);
+}
+
+test "ORA with zero accumulator sets zero flag only when both are zero" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x00, 0x09, 0x00 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$00
+    _ = cpu.step(); // ORA #$00
+
+    try std.testing.expect(cpu.registers.a == 0x00);
+    try std.testing.expect(cpu.registers.flags.z == true);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "ORA zero page" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x33, 0x05, 0x10 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0010, 0xCC);
+
+    _ = cpu.step(); // LDA #$33 (00110011)
+    _ = cpu.step(); // ORA $10   (11001100)
+
+    try std.testing.expect(cpu.registers.a == 0xFF); // 11111111
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true);
+}
+
+test "ORA zero page,X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA2, 0x05, // LDX #$05
+        0xA9, 0x0F, // LDA #$0F
+        0x15, 0x10, // ORA $10,X (→ $15)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0015, 0xF0);
+
+    _ = cpu.step(); // LDX #$05
+    _ = cpu.step(); // LDA #$0F
+    _ = cpu.step(); // ORA $10,X
+
+    try std.testing.expect(cpu.registers.a == 0xFF); // 0x0F | 0xF0 = 0xFF
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true);
+}
+
+test "ORA absolute" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA9,              0x55, // LDA #$55 (01010101)
+        0x0D,              0x00,
+        0x03, // ORA $0300
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0300, 0xAA); // 10101010
+
+    _ = cpu.step(); // LDA #$55
+    _ = cpu.step(); // ORA $0300
+
+    try std.testing.expect(cpu.registers.a == 0xFF); // 01010101 | 10101010 = 11111111
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true);
+}
+
+test "ORA absolute,X with page crossing" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA2, 0x01, // LDX #$01
+        0xA9,                                          0x88, // LDA #$88
+        0x1D,                                          0xFF,
+        0x00, // ORA $00FF,X (→ $0100, page crossed)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0100, 0x44);
+
+    _ = cpu.step(); // LDX #$01
+    _ = cpu.step(); // LDA #$88
+    const cycles = cpu.step(); // ORA $00FF,X
+
+    try std.testing.expect(cpu.registers.a == 0xCC); // 0x88 | 0x44 = 0xCC
+    try std.testing.expect(cpu.registers.flags.n == true);
+    try std.testing.expect(cycles == 5); // +1 cycle for page crossing
+}
+
+test "ORA absolute,Y with page crossing" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA0, 0x02, // LDY #$02
+        0xA9,                                          0x11, // LDA #$11
+        0x19,                                          0xFE,
+        0x00, // ORA $00FE,Y (→ $0100, page crossed)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0100, 0x22);
+
+    _ = cpu.step(); // LDY #$02
+    _ = cpu.step(); // LDA #$11
+    const cycles = cpu.step(); // ORA $00FE,Y
+
+    try std.testing.expect(cpu.registers.a == 0x33); // 0x11 | 0x22 = 0x33
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+    try std.testing.expect(cycles == 5); // +1 cycle for page crossing
+}
+
+test "ORA indirect,X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA2, 0x04, // LDX #$04
+        0xA9, 0x03, // LDA #$03
+        0x01, 0x20, // ORA ($20,X) → ($24)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Setup indirect address at $24-$25
+    bus.write(0x0024, 0x00); // Low byte → $0200
+    bus.write(0x0025, 0x02); // High byte
+    bus.write(0x0200, 0x0C); // Value at target address
+
+    _ = cpu.step(); // LDX #$04
+    _ = cpu.step(); // LDA #$03
+    _ = cpu.step(); // ORA ($20,X)
+
+    try std.testing.expect(cpu.registers.a == 0x0F); // 0x03 | 0x0C = 0x0F
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "ORA indirect,Y" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA0, 0x03, // LDY #$03
+        0xA9, 0x40, // LDA #$40
+        0x11, 0x40, // ORA ($40),Y
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Setup base address at $40-$41
+    bus.write(0x0040, 0x00); // Low byte → $0300
+    bus.write(0x0041, 0x03); // High byte
+    // Effective address: $0300 + Y($03) = $0303
+    bus.write(0x0303, 0x80); // Value at effective address
+
+    _ = cpu.step(); // LDY #$03
+    _ = cpu.step(); // LDA #$40
+    _ = cpu.step(); // ORA ($40),Y
+
+    try std.testing.expect(cpu.registers.a == 0xC0); // 0x40 | 0x80 = 0xC0
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true); // bit 7 set
+}
+
+test "ORA edge cases" {
+    const allocator = std.testing.allocator;
+
+    // Test ORA with 0xFF (should always result in 0xFF)
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, 0x00, // LDA #$00
+            0x09, 0xFF, // ORA #$FF
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // ORA
+        try std.testing.expect(cpu.registers.a == 0xFF);
+        try std.testing.expect(cpu.registers.flags.z == false);
+        try std.testing.expect(cpu.registers.flags.n == true);
+    }
+
+    // Test ORA with complementary values
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, 0xF0, // LDA #$F0 (11110000)
+            0x09, 0x0F, // ORA #$0F (00001111)
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // ORA
+        try std.testing.expect(cpu.registers.a == 0xFF); // All bits set
+        try std.testing.expect(cpu.registers.flags.z == false);
+        try std.testing.expect(cpu.registers.flags.n == true);
+    }
+}
+
 // Test for STA with PPU registers
 test "STA stores A into $2000 and updates PPUCTRL" {
     const allocator = std.testing.allocator;

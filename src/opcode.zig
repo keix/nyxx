@@ -214,5 +214,23 @@ pub const instruction_table = blk: {
     table[0xE1] = .{ .mnemonic = .SBC, .addressing_mode = .indirect_x, .cycles = 6 };
     table[0xF1] = .{ .mnemonic = .SBC, .addressing_mode = .indirect_y, .cycles = 5, .may_page_cross = true };
 
+    table[0x29] = .{ .mnemonic = .AND, .addressing_mode = .immediate, .cycles = 2 };
+    table[0x25] = .{ .mnemonic = .AND, .addressing_mode = .zero_page, .cycles = 3 };
+    table[0x35] = .{ .mnemonic = .AND, .addressing_mode = .zero_page_x, .cycles = 4 };
+    table[0x2D] = .{ .mnemonic = .AND, .addressing_mode = .absolute, .cycles = 4 };
+    table[0x3D] = .{ .mnemonic = .AND, .addressing_mode = .absolute_x, .cycles = 4, .may_page_cross = true };
+    table[0x39] = .{ .mnemonic = .AND, .addressing_mode = .absolute_y, .cycles = 4, .may_page_cross = true };
+    table[0x21] = .{ .mnemonic = .AND, .addressing_mode = .indirect_x, .cycles = 6 };
+    table[0x31] = .{ .mnemonic = .AND, .addressing_mode = .indirect_y, .cycles = 5, .may_page_cross = true };
+
+    table[0x09] = .{ .mnemonic = .ORA, .addressing_mode = .immediate, .cycles = 2 };
+    table[0x05] = .{ .mnemonic = .ORA, .addressing_mode = .zero_page, .cycles = 3 };
+    table[0x15] = .{ .mnemonic = .ORA, .addressing_mode = .zero_page_x, .cycles = 4 };
+    table[0x0D] = .{ .mnemonic = .ORA, .addressing_mode = .absolute, .cycles = 4 };
+    table[0x1D] = .{ .mnemonic = .ORA, .addressing_mode = .absolute_x, .cycles = 4, .may_page_cross = true };
+    table[0x19] = .{ .mnemonic = .ORA, .addressing_mode = .absolute_y, .cycles = 4, .may_page_cross = true };
+    table[0x01] = .{ .mnemonic = .ORA, .addressing_mode = .indirect_x, .cycles = 6 };
+    table[0x11] = .{ .mnemonic = .ORA, .addressing_mode = .indirect_y, .cycles = 5, .may_page_cross = true };
+
     break :blk table;
 };
