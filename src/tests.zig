@@ -1455,8 +1455,8 @@ test "ORA zero page,X" {
 test "ORA absolute" {
     const allocator = std.testing.allocator;
     const rom = try buildTestRom(allocator, &.{
-        0xA9,              0x55, // LDA #$55 (01010101)
-        0x0D,              0x00,
+        0xA9, 0x55, // LDA #$55 (01010101)
+        0x0D, 0x00,
         0x03, // ORA $0300
     }, 0x8000);
     defer allocator.free(rom);
@@ -1478,8 +1478,8 @@ test "ORA absolute,X with page crossing" {
     const allocator = std.testing.allocator;
     const rom = try buildTestRom(allocator, &.{
         0xA2, 0x01, // LDX #$01
-        0xA9,                                          0x88, // LDA #$88
-        0x1D,                                          0xFF,
+        0xA9, 0x88, // LDA #$88
+        0x1D, 0xFF,
         0x00, // ORA $00FF,X (→ $0100, page crossed)
     }, 0x8000);
     defer allocator.free(rom);
@@ -1502,8 +1502,8 @@ test "ORA absolute,Y with page crossing" {
     const allocator = std.testing.allocator;
     const rom = try buildTestRom(allocator, &.{
         0xA0, 0x02, // LDY #$02
-        0xA9,                                          0x11, // LDA #$11
-        0x19,                                          0xFE,
+        0xA9, 0x11, // LDA #$11
+        0x19, 0xFE,
         0x00, // ORA $00FE,Y (→ $0100, page crossed)
     }, 0x8000);
     defer allocator.free(rom);
@@ -1612,6 +1612,374 @@ test "ORA edge cases" {
         _ = cpu.step(); // ORA
         try std.testing.expect(cpu.registers.a == 0xFF); // All bits set
         try std.testing.expect(cpu.registers.flags.z == false);
+        try std.testing.expect(cpu.registers.flags.n == true);
+    }
+}
+
+test "EOR immediate updates A and flags" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0xCC, 0x49, 0xAA }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$CC (11001100)
+    try std.testing.expect(cpu.registers.a == 0xCC);
+
+    _ = cpu.step(); // EOR #$AA (10101010)
+    try std.testing.expect(cpu.registers.a == 0x66); // 11001100 ^ 10101010 = 01100110
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "EOR with same value results in zero" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x42, 0x49, 0x42 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$42
+    _ = cpu.step(); // EOR #$42
+
+    try std.testing.expect(cpu.registers.a == 0x00); // 任意の値 ^ 同じ値 = 0
+    try std.testing.expect(cpu.registers.flags.z == true);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "EOR sets negative flag" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x70, 0x49, 0xFF }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$70 (01110000)
+    _ = cpu.step(); // EOR #$FF (11111111)
+
+    try std.testing.expect(cpu.registers.a == 0x8F); // 01110000 ^ 11111111 = 10001111
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true);
+}
+
+test "EOR with zero preserves original value" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x55, 0x49, 0x00 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$55
+    _ = cpu.step(); // EOR #$00
+
+    try std.testing.expect(cpu.registers.a == 0x55); // 任意の値 ^ 0 = 元の値
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "EOR zero page" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0xF0, 0x45, 0x10 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0010, 0x0F);
+
+    _ = cpu.step(); // LDA #$F0 (11110000)
+    _ = cpu.step(); // EOR $10   (00001111)
+
+    try std.testing.expect(cpu.registers.a == 0xFF); // 11110000 ^ 00001111 = 11111111
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true);
+}
+
+test "EOR zero page,X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA2, 0x03, // LDX #$03
+        0xA9, 0x99, // LDA #$99
+        0x55, 0x20, // EOR $20,X (→ $23)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0023, 0x66);
+
+    _ = cpu.step(); // LDX #$03
+    _ = cpu.step(); // LDA #$99
+    _ = cpu.step(); // EOR $20,X
+
+    try std.testing.expect(cpu.registers.a == 0xFF); // 0x99 ^ 0x66 = 0xFF
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true);
+}
+
+test "EOR absolute" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA9,              0x3C, // LDA #$3C (00111100)
+        0x4D,              0x00,
+        0x03, // EOR $0300
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0300, 0xC3); // 11000011
+
+    _ = cpu.step(); // LDA #$3C
+    _ = cpu.step(); // EOR $0300
+
+    try std.testing.expect(cpu.registers.a == 0xFF); // 00111100 ^ 11000011 = 11111111
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true);
+}
+
+test "EOR absolute,X with page crossing" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA2, 0x01, // LDX #$01
+        0xA9,                                          0xA5, // LDA #$A5
+        0x5D,                                          0xFF,
+        0x00, // EOR $00FF,X (→ $0100, page crossed)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0100, 0x5A);
+
+    _ = cpu.step(); // LDX #$01
+    _ = cpu.step(); // LDA #$A5
+    const cycles = cpu.step(); // EOR $00FF,X
+
+    try std.testing.expect(cpu.registers.a == 0xFF); // 0xA5 ^ 0x5A = 0xFF
+    try std.testing.expect(cpu.registers.flags.n == true);
+    try std.testing.expect(cycles == 5); // +1 cycle for page crossing
+}
+
+test "EOR absolute,Y with page crossing" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA0, 0x02, // LDY #$02
+        0xA9,                                          0x18, // LDA #$18
+        0x59,                                          0xFE,
+        0x00, // EOR $00FE,Y (→ $0100, page crossed)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0100, 0x18);
+
+    _ = cpu.step(); // LDY #$02
+    _ = cpu.step(); // LDA #$18
+    const cycles = cpu.step(); // EOR $00FE,Y
+
+    try std.testing.expect(cpu.registers.a == 0x00); // 0x18 ^ 0x18 = 0x00
+    try std.testing.expect(cpu.registers.flags.z == true);
+    try std.testing.expect(cpu.registers.flags.n == false);
+    try std.testing.expect(cycles == 5); // +1 cycle for page crossing
+}
+
+test "EOR indirect,X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA2, 0x04, // LDX #$04
+        0xA9, 0xC6, // LDA #$C6
+        0x41, 0x20, // EOR ($20,X) → ($24)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Setup indirect address at $24-$25
+    bus.write(0x0024, 0x00); // Low byte → $0200
+    bus.write(0x0025, 0x02); // High byte
+    bus.write(0x0200, 0x39); // Value at target address
+
+    _ = cpu.step(); // LDX #$04
+    _ = cpu.step(); // LDA #$C6
+    _ = cpu.step(); // EOR ($20,X)
+
+    try std.testing.expect(cpu.registers.a == 0xFF); // 0xC6 ^ 0x39 = 0xFF
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true);
+}
+
+test "EOR indirect,Y" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA0, 0x05, // LDY #$05
+        0xA9, 0x81, // LDA #$81
+        0x51, 0x40, // EOR ($40),Y
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Setup base address at $40-$41
+    bus.write(0x0040, 0x00); // Low byte → $0300
+    bus.write(0x0041, 0x03); // High byte
+    // Effective address: $0300 + Y($05) = $0305
+    bus.write(0x0305, 0x81); // Value at effective address
+
+    _ = cpu.step(); // LDY #$05
+    _ = cpu.step(); // LDA #$81
+    _ = cpu.step(); // EOR ($40),Y
+
+    try std.testing.expect(cpu.registers.a == 0x00); // 0x81 ^ 0x81 = 0x00
+    try std.testing.expect(cpu.registers.flags.z == true);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "EOR bit manipulation patterns" {
+    const allocator = std.testing.allocator;
+
+    // Test bit toggling with EOR
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, 0xFF, // LDA #$FF (11111111)
+            0x49, 0x01, // EOR #$01 (00000001) - toggle bit 0
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // EOR
+        try std.testing.expect(cpu.registers.a == 0xFE); // 11111110
+        try std.testing.expect(cpu.registers.flags.n == true);
+    }
+
+    // Test bit mask clearing
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, 0b10101010, // LDA #$AA
+            0x49, 0b11110000, // EOR #$F0 - toggle upper 4 bits
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // EOR
+        try std.testing.expect(cpu.registers.a == 0b01011010); // 0x5A
+        try std.testing.expect(cpu.registers.flags.z == false);
+        try std.testing.expect(cpu.registers.flags.n == false);
+    }
+}
+
+test "EOR all addressing modes consistency" {
+    const allocator = std.testing.allocator;
+
+    // Test that all addressing modes produce the same result for the same operands
+    const test_value = 0xA3; // 10100011
+    const xor_mask = 0x5C; // 01011100
+    const expected = 0xFF; // 11111111
+
+    // Immediate mode
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, test_value, // LDA #$A3
+            0x49, xor_mask, // EOR #$5C
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // EOR
+        try std.testing.expect(cpu.registers.a == expected);
+    }
+
+    // Zero page mode
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, test_value, // LDA #$A3
+            0x45, 0x50, // EOR $50
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x0050, xor_mask);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // EOR
+        try std.testing.expect(cpu.registers.a == expected);
+    }
+
+    // Absolute mode
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9,              test_value, // LDA #$A3
+            0x4D,              0x00,
+            0x04, // EOR $0400
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x0400, xor_mask);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // EOR
+        try std.testing.expect(cpu.registers.a == expected);
+    }
+}
+
+test "EOR edge cases" {
+    const allocator = std.testing.allocator;
+
+    // Double EOR returns to original value
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, 0x77, // LDA #$77
+            0x49, 0x23, // EOR #$23
+            0x49, 0x23, // EOR #$23 again
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // EOR (first)
+        _ = cpu.step(); // EOR (second)
+        try std.testing.expect(cpu.registers.a == 0x77); // Back to original
+    }
+
+    // EOR with all bits set (complement)
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, 0x0F, // LDA #$0F (00001111)
+            0x49, 0xFF, // EOR #$FF (11111111)
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // EOR
+        try std.testing.expect(cpu.registers.a == 0xF0); // Complement: 11110000
         try std.testing.expect(cpu.registers.flags.n == true);
     }
 }
