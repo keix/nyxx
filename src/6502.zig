@@ -131,6 +131,8 @@ pub const CPU = struct {
             .AND => self.opAnd(instr.addressing_mode),
             .ORA => self.opOra(instr.addressing_mode),
             .EOR => self.opEor(instr.addressing_mode),
+            .CPX => self.opCpx(instr.addressing_mode),
+            .CPY => self.opCpy(instr.addressing_mode),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -187,6 +189,13 @@ pub const CPU = struct {
             self.branch_taken = false;
             self.page_crossed = false;
         }
+    }
+
+    inline fn calculateBranchTarget(base: u16, offset: i8) u16 {
+        return if (offset >= 0)
+            base +% @as(u16, @intCast(offset))
+        else
+            base -% @as(u16, @intCast(-offset));
     }
 
     inline fn readFrom(self: *CPU, mode: Opcode.AddressingMode) u8 {
@@ -359,56 +368,56 @@ pub const CPU = struct {
     inline fn opBeq(self: *CPU) void {
         const offset = @as(i8, @bitCast(self.fetchU8()));
         const base = self.registers.pc;
-        const target = base +% @as(u16, @intCast(offset));
+        const target = calculateBranchTarget(base, offset);
         self.branch(self.registers.flags.z, base, target);
     }
 
     inline fn opBne(self: *CPU) void {
         const offset = @as(i8, @bitCast(self.fetchU8()));
         const base = self.registers.pc;
-        const target = base +% @as(u16, @intCast(offset));
+        const target = calculateBranchTarget(base, offset);
         self.branch(!self.registers.flags.z, base, target);
     }
 
     inline fn opBpl(self: *CPU) void {
         const offset = @as(i8, @bitCast(self.fetchU8()));
         const base = self.registers.pc;
-        const target = base +% @as(u16, @intCast(offset));
+        const target = calculateBranchTarget(base, offset);
         self.branch(!self.registers.flags.n, base, target);
     }
 
     inline fn opBmi(self: *CPU) void {
         const offset = @as(i8, @bitCast(self.fetchU8()));
         const base = self.registers.pc;
-        const target = base +% @as(u16, @intCast(offset));
+        const target = calculateBranchTarget(base, offset);
         self.branch(self.registers.flags.n, base, target);
     }
 
     inline fn opBcc(self: *CPU) void {
         const offset = @as(i8, @bitCast(self.fetchU8()));
         const base = self.registers.pc;
-        const target = base +% @as(u16, @intCast(offset));
+        const target = calculateBranchTarget(base, offset);
         self.branch(!self.registers.flags.c, base, target);
     }
 
     inline fn opBcs(self: *CPU) void {
         const offset = @as(i8, @bitCast(self.fetchU8()));
         const base = self.registers.pc;
-        const target = base +% @as(u16, @intCast(offset));
+        const target = calculateBranchTarget(base, offset);
         self.branch(self.registers.flags.c, base, target);
     }
 
     inline fn opBvc(self: *CPU) void {
         const offset = @as(i8, @bitCast(self.fetchU8()));
         const base = self.registers.pc;
-        const target = base +% @as(u16, @intCast(offset));
+        const target = calculateBranchTarget(base, offset);
         self.branch(!self.registers.flags.v, base, target);
     }
 
     inline fn opBvs(self: *CPU) void {
         const offset = @as(i8, @bitCast(self.fetchU8()));
         const base = self.registers.pc;
-        const target = base +% @as(u16, @intCast(offset));
+        const target = calculateBranchTarget(base, offset);
         self.branch(self.registers.flags.v, base, target);
     }
 
@@ -598,5 +607,15 @@ pub const CPU = struct {
         const value = self.readFrom(addressing_mode);
         self.registers.a ^= value;
         self.updateZN(self.registers.a);
+    }
+
+    inline fn opCpx(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+        const value = self.readFrom(addressing_mode);
+        self.compare(self.registers.x, value);
+    }
+
+    inline fn opCpy(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+        const value = self.readFrom(addressing_mode);
+        self.compare(self.registers.y, value);
     }
 };

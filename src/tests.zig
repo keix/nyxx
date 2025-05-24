@@ -1725,8 +1725,8 @@ test "EOR zero page,X" {
 test "EOR absolute" {
     const allocator = std.testing.allocator;
     const rom = try buildTestRom(allocator, &.{
-        0xA9,              0x3C, // LDA #$3C (00111100)
-        0x4D,              0x00,
+        0xA9, 0x3C, // LDA #$3C (00111100)
+        0x4D, 0x00,
         0x03, // EOR $0300
     }, 0x8000);
     defer allocator.free(rom);
@@ -1748,8 +1748,8 @@ test "EOR absolute,X with page crossing" {
     const allocator = std.testing.allocator;
     const rom = try buildTestRom(allocator, &.{
         0xA2, 0x01, // LDX #$01
-        0xA9,                                          0xA5, // LDA #$A5
-        0x5D,                                          0xFF,
+        0xA9, 0xA5, // LDA #$A5
+        0x5D, 0xFF,
         0x00, // EOR $00FF,X (→ $0100, page crossed)
     }, 0x8000);
     defer allocator.free(rom);
@@ -1772,8 +1772,8 @@ test "EOR absolute,Y with page crossing" {
     const allocator = std.testing.allocator;
     const rom = try buildTestRom(allocator, &.{
         0xA0, 0x02, // LDY #$02
-        0xA9,                                          0x18, // LDA #$18
-        0x59,                                          0xFE,
+        0xA9, 0x18, // LDA #$18
+        0x59, 0xFE,
         0x00, // EOR $00FE,Y (→ $0100, page crossed)
     }, 0x8000);
     defer allocator.free(rom);
@@ -1929,8 +1929,8 @@ test "EOR all addressing modes consistency" {
     // Absolute mode
     {
         const rom = try buildTestRom(allocator, &.{
-            0xA9,              test_value, // LDA #$A3
-            0x4D,              0x00,
+            0xA9, test_value, // LDA #$A3
+            0x4D, 0x00,
             0x04, // EOR $0400
         }, 0x8000);
         defer allocator.free(rom);
@@ -1981,6 +1981,578 @@ test "EOR edge cases" {
         _ = cpu.step(); // EOR
         try std.testing.expect(cpu.registers.a == 0xF0); // Complement: 11110000
         try std.testing.expect(cpu.registers.flags.n == true);
+    }
+}
+
+test "CPX immediate - equal values" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA2, 0x42, 0xE0, 0x42 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDX #$42
+    try std.testing.expect(cpu.registers.x == 0x42);
+
+    _ = cpu.step(); // CPX #$42
+    try std.testing.expect(cpu.registers.flags.z == true); // X == value
+    try std.testing.expect(cpu.registers.flags.c == true); // X >= value (no borrow)
+    try std.testing.expect(cpu.registers.flags.n == false); // result positive
+}
+
+test "CPX immediate - X greater than value" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA2, 0x50, 0xE0, 0x30 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDX #$50
+    _ = cpu.step(); // CPX #$30
+
+    try std.testing.expect(cpu.registers.flags.z == false); // X != value
+    try std.testing.expect(cpu.registers.flags.c == true); // X >= value (no borrow)
+    try std.testing.expect(cpu.registers.flags.n == false); // result positive (0x50 - 0x30 = 0x20)
+}
+
+test "CPX immediate - X less than value" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA2, 0x30, 0xE0, 0x50 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDX #$30
+    _ = cpu.step(); // CPX #$50
+
+    try std.testing.expect(cpu.registers.flags.z == false); // X != value
+    try std.testing.expect(cpu.registers.flags.c == false); // X < value (borrow occurred)
+    try std.testing.expect(cpu.registers.flags.n == true); // result negative (0x30 - 0x50 = 0xE0)
+}
+
+test "CPX immediate - X is zero, comparing with positive" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA2, 0x00, 0xE0, 0x01 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDX #$00
+    _ = cpu.step(); // CPX #$01
+
+    try std.testing.expect(cpu.registers.flags.z == false); // 0 != 1
+    try std.testing.expect(cpu.registers.flags.c == false); // 0 < 1 (borrow)
+    try std.testing.expect(cpu.registers.flags.n == true); // 0x00 - 0x01 = 0xFF (negative)
+}
+
+test "CPX immediate - comparing with zero" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA2, 0x80, 0xE0, 0x00 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDX #$80
+    _ = cpu.step(); // CPX #$00
+
+    try std.testing.expect(cpu.registers.flags.z == false); // 0x80 != 0
+    try std.testing.expect(cpu.registers.flags.c == true); // 0x80 >= 0 (no borrow)
+    try std.testing.expect(cpu.registers.flags.n == true); // result has bit 7 set (0x80)
+}
+
+test "CPX zero page" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA2, 0x7F, 0xE4, 0x10 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0010, 0x7F);
+
+    _ = cpu.step(); // LDX #$7F
+    _ = cpu.step(); // CPX $10
+
+    try std.testing.expect(cpu.registers.flags.z == true); // 0x7F == 0x7F
+    try std.testing.expect(cpu.registers.flags.c == true); // 0x7F >= 0x7F
+    try std.testing.expect(cpu.registers.flags.n == false); // result is 0
+}
+
+test "CPX absolute" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA2, 0x40, 0xEC, 0x00, 0x30 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x3000, 0x20);
+
+    _ = cpu.step(); // LDX #$40
+    _ = cpu.step(); // CPX $3000
+
+    try std.testing.expect(cpu.registers.flags.z == false); // 0x40 != 0x20
+    try std.testing.expect(cpu.registers.flags.c == true); // 0x40 >= 0x20 (no borrow)
+    try std.testing.expect(cpu.registers.flags.n == false); // 0x40 - 0x20 = 0x20 (positive)
+}
+
+test "CPX does not affect X register" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA2, 0x99, 0xE0, 0x55 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDX #$99
+    const x_before = cpu.registers.x;
+
+    _ = cpu.step(); // CPX #$55
+
+    try std.testing.expect(cpu.registers.x == x_before); // X register unchanged
+    try std.testing.expect(cpu.registers.x == 0x99);
+}
+
+test "CPX boundary values" {
+    const allocator = std.testing.allocator;
+
+    // Test with maximum values
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA2, 0xFF, 0xE0, 0xFF }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDX #$FF
+        _ = cpu.step(); // CPX #$FF
+
+        try std.testing.expect(cpu.registers.flags.z == true); // 0xFF == 0xFF
+        try std.testing.expect(cpu.registers.flags.c == true); // 0xFF >= 0xFF
+        try std.testing.expect(cpu.registers.flags.n == false); // result is 0
+    }
+
+    // Test 0xFF vs 0x00 (maximum difference)
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA2, 0xFF, 0xE0, 0x00 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDX #$FF
+        _ = cpu.step(); // CPX #$00
+
+        try std.testing.expect(cpu.registers.flags.z == false); // 0xFF != 0x00
+        try std.testing.expect(cpu.registers.flags.c == true); // 0xFF >= 0x00
+        try std.testing.expect(cpu.registers.flags.n == true); // result is 0xFF (negative)
+    }
+
+    // Test 0x00 vs 0xFF (minimum vs maximum)
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA2, 0x00, 0xE0, 0xFF }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDX #$00
+        _ = cpu.step(); // CPX #$FF
+
+        try std.testing.expect(cpu.registers.flags.z == false); // 0x00 != 0xFF
+        try std.testing.expect(cpu.registers.flags.c == false); // 0x00 < 0xFF (borrow)
+        try std.testing.expect(cpu.registers.flags.n == false); // 0x00 - 0xFF = 0x01 (positive due to wrap)
+    }
+}
+
+test "CPX cycles count" {
+    const allocator = std.testing.allocator;
+
+    // Immediate mode - 2 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA2, 0x42, 0xE0, 0x42 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDX
+        const cycles = cpu.step(); // CPX immediate
+        try std.testing.expect(cycles == 2);
+    }
+
+    // Zero page mode - 3 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA2, 0x42, 0xE4, 0x10 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x0010, 0x42);
+
+        _ = cpu.step(); // LDX
+        const cycles = cpu.step(); // CPX zero page
+        try std.testing.expect(cycles == 3);
+    }
+
+    // Absolute mode - 4 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA2, 0x42, 0xEC, 0x00, 0x30 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x3000, 0x42);
+
+        _ = cpu.step(); // LDX
+        const cycles = cpu.step(); // CPX absolute
+        try std.testing.expect(cycles == 4);
+    }
+}
+
+test "CPX common usage patterns" {
+    const allocator = std.testing.allocator;
+
+    // Loop counter check (common pattern)
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA2, 0x00, // LDX #$00    ; Initialize counter
+            0xE8, // INX         ; Increment counter
+            0xE0, 0x05, // CPX #$05    ; Compare with limit
+            0xD0, 0xFB, // BNE -5      ; Branch if not equal (loop)
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDX #$00
+        _ = cpu.step(); // INX (X = 1)
+        _ = cpu.step(); // CPX #$05
+
+        // Should not be equal yet, so Z flag should be false
+        try std.testing.expect(cpu.registers.flags.z == false);
+        try std.testing.expect(cpu.registers.flags.c == false); // 1 < 5
+
+        // Continue loop several times
+        for (0..4) |_| {
+            _ = cpu.step(); // BNE (should branch)
+            _ = cpu.step(); // INX
+            _ = cpu.step(); // CPX #$05
+        }
+
+        // Now X should be 5
+        try std.testing.expect(cpu.registers.x == 5);
+        try std.testing.expect(cpu.registers.flags.z == true); // X == 5
+        try std.testing.expect(cpu.registers.flags.c == true); // X >= 5
+    }
+}
+
+test "CPY immediate - equal values" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA0, 0x42, 0xC0, 0x42 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDY #$42
+    try std.testing.expect(cpu.registers.y == 0x42);
+
+    _ = cpu.step(); // CPY #$42
+    try std.testing.expect(cpu.registers.flags.z == true); // Y == value
+    try std.testing.expect(cpu.registers.flags.c == true); // Y >= value (no borrow)
+    try std.testing.expect(cpu.registers.flags.n == false); // result positive
+}
+
+test "CPY immediate - Y greater than value" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA0, 0x60, 0xC0, 0x40 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDY #$60
+    _ = cpu.step(); // CPY #$40
+
+    try std.testing.expect(cpu.registers.flags.z == false); // Y != value
+    try std.testing.expect(cpu.registers.flags.c == true); // Y >= value (no borrow)
+    try std.testing.expect(cpu.registers.flags.n == false); // result positive (0x60 - 0x40 = 0x20)
+}
+
+test "CPY immediate - Y less than value" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA0, 0x20, 0xC0, 0x40 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDY #$20
+    _ = cpu.step(); // CPY #$40
+
+    try std.testing.expect(cpu.registers.flags.z == false); // Y != value
+    try std.testing.expect(cpu.registers.flags.c == false); // Y < value (borrow occurred)
+    try std.testing.expect(cpu.registers.flags.n == true); // result negative (0x20 - 0x40 = 0xE0)
+}
+
+test "CPY immediate - Y is zero, comparing with positive" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA0, 0x00, 0xC0, 0x01 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDY #$00
+    _ = cpu.step(); // CPY #$01
+
+    try std.testing.expect(cpu.registers.flags.z == false); // 0 != 1
+    try std.testing.expect(cpu.registers.flags.c == false); // 0 < 1 (borrow)
+    try std.testing.expect(cpu.registers.flags.n == true); // 0x00 - 0x01 = 0xFF (negative)
+}
+
+test "CPY immediate - comparing with zero" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA0, 0x80, 0xC0, 0x00 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDY #$80
+    _ = cpu.step(); // CPY #$00
+
+    try std.testing.expect(cpu.registers.flags.z == false); // 0x80 != 0
+    try std.testing.expect(cpu.registers.flags.c == true); // 0x80 >= 0 (no borrow)
+    try std.testing.expect(cpu.registers.flags.n == true); // result has bit 7 set (0x80)
+}
+
+test "CPY zero page" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA0, 0x7F, 0xC4, 0x10 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0010, 0x7F);
+
+    _ = cpu.step(); // LDY #$7F
+    _ = cpu.step(); // CPY $10
+
+    try std.testing.expect(cpu.registers.flags.z == true); // 0x7F == 0x7F
+    try std.testing.expect(cpu.registers.flags.c == true); // 0x7F >= 0x7F
+    try std.testing.expect(cpu.registers.flags.n == false); // result is 0
+}
+
+test "CPY absolute" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA0, 0x50, 0xCC, 0x00, 0x30 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x3000, 0x30);
+
+    _ = cpu.step(); // LDY #$50
+    _ = cpu.step(); // CPY $3000
+
+    try std.testing.expect(cpu.registers.flags.z == false); // 0x50 != 0x30
+    try std.testing.expect(cpu.registers.flags.c == true); // 0x50 >= 0x30 (no borrow)
+    try std.testing.expect(cpu.registers.flags.n == false); // 0x50 - 0x30 = 0x20 (positive)
+}
+
+test "CPY does not affect Y register" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA0, 0x88, 0xC0, 0x44 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDY #$88
+    const y_before = cpu.registers.y;
+
+    _ = cpu.step(); // CPY #$44
+
+    try std.testing.expect(cpu.registers.y == y_before); // Y register unchanged
+    try std.testing.expect(cpu.registers.y == 0x88);
+}
+
+test "CPY boundary values" {
+    const allocator = std.testing.allocator;
+
+    // Test with maximum values
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA0, 0xFF, 0xC0, 0xFF }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDY #$FF
+        _ = cpu.step(); // CPY #$FF
+
+        try std.testing.expect(cpu.registers.flags.z == true); // 0xFF == 0xFF
+        try std.testing.expect(cpu.registers.flags.c == true); // 0xFF >= 0xFF
+        try std.testing.expect(cpu.registers.flags.n == false); // result is 0
+    }
+
+    // Test 0xFF vs 0x00 (maximum difference)
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA0, 0xFF, 0xC0, 0x00 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDY #$FF
+        _ = cpu.step(); // CPY #$00
+
+        try std.testing.expect(cpu.registers.flags.z == false); // 0xFF != 0x00
+        try std.testing.expect(cpu.registers.flags.c == true); // 0xFF >= 0x00
+        try std.testing.expect(cpu.registers.flags.n == true); // result is 0xFF (negative)
+    }
+
+    // Test 0x00 vs 0xFF (minimum vs maximum)
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA0, 0x00, 0xC0, 0xFF }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDY #$00
+        _ = cpu.step(); // CPY #$FF
+
+        try std.testing.expect(cpu.registers.flags.z == false); // 0x00 != 0xFF
+        try std.testing.expect(cpu.registers.flags.c == false); // 0x00 < 0xFF (borrow)
+        try std.testing.expect(cpu.registers.flags.n == false); // 0x00 - 0xFF = 0x01 (positive due to wrap)
+    }
+}
+
+test "CPY cycles count" {
+    const allocator = std.testing.allocator;
+
+    // Immediate mode - 2 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA0, 0x42, 0xC0, 0x42 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDY
+        const cycles = cpu.step(); // CPY immediate
+        try std.testing.expect(cycles == 2);
+    }
+
+    // Zero page mode - 3 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA0, 0x42, 0xC4, 0x10 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x0010, 0x42);
+
+        _ = cpu.step(); // LDY
+        const cycles = cpu.step(); // CPY zero page
+        try std.testing.expect(cycles == 3);
+    }
+
+    // Absolute mode - 4 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA0, 0x42, 0xCC, 0x00, 0x30 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x3000, 0x42);
+
+        _ = cpu.step(); // LDY
+        const cycles = cpu.step(); // CPY absolute
+        try std.testing.expect(cycles == 4);
+    }
+}
+
+test "CPY common usage patterns" {
+    const allocator = std.testing.allocator;
+
+    // Array index check (common pattern)
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA0, 0x00, // LDY #$00    ; Initialize index
+            0xC8, // INY         ; Increment index
+            0xC0, 0x08, // CPY #$08    ; Compare with array size
+            0xD0, 0xFB, // BNE -5      ; Branch if not equal (loop)
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDY #$00
+        _ = cpu.step(); // INY (Y = 1)
+        _ = cpu.step(); // CPY #$08
+
+        // Should not be equal yet, so Z flag should be false
+        try std.testing.expect(cpu.registers.flags.z == false);
+        try std.testing.expect(cpu.registers.flags.c == false); // 1 < 8
+
+        // Continue loop several times
+        for (0..7) |_| {
+            _ = cpu.step(); // BNE (should branch)
+            _ = cpu.step(); // INY
+            _ = cpu.step(); // CPY #$08
+        }
+
+        // Now Y should be 8
+        try std.testing.expect(cpu.registers.y == 8);
+        try std.testing.expect(cpu.registers.flags.z == true); // Y == 8
+        try std.testing.expect(cpu.registers.flags.c == true); // Y >= 8
+    }
+
+    // Countdown pattern
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA0, 0x05, // LDY #$05    ; Initialize countdown
+            0x88, // DEY         ; Decrement
+            0xC0, 0x00, // CPY #$00    ; Compare with zero
+            0xD0, 0xFB, // BNE -5      ; Branch if not zero
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDY #$05
+        _ = cpu.step(); // DEY (Y = 4)
+        _ = cpu.step(); // CPY #$00
+
+        // Should not be zero yet
+        try std.testing.expect(cpu.registers.flags.z == false);
+        try std.testing.expect(cpu.registers.flags.c == true); // 4 >= 0
+
+        // Continue countdown
+        for (0..4) |_| {
+            _ = cpu.step(); // BNE (should branch)
+            _ = cpu.step(); // DEY
+            _ = cpu.step(); // CPY #$00
+        }
+
+        // Now Y should be 0
+        try std.testing.expect(cpu.registers.y == 0);
+        try std.testing.expect(cpu.registers.flags.z == true); // Y == 0
+        try std.testing.expect(cpu.registers.flags.c == true); // Y >= 0
     }
 }
 

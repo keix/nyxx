@@ -241,5 +241,13 @@ pub const instruction_table = blk: {
     table[0x41] = .{ .mnemonic = .EOR, .addressing_mode = .indirect_x, .cycles = 6 };
     table[0x51] = .{ .mnemonic = .EOR, .addressing_mode = .indirect_y, .cycles = 5, .may_page_cross = true };
 
+    table[0xE0] = .{ .mnemonic = .CPX, .addressing_mode = .immediate, .cycles = 2 };
+    table[0xE4] = .{ .mnemonic = .CPX, .addressing_mode = .zero_page, .cycles = 3 };
+    table[0xEC] = .{ .mnemonic = .CPX, .addressing_mode = .absolute, .cycles = 4 };
+
+    table[0xC0] = .{ .mnemonic = .CPY, .addressing_mode = .immediate, .cycles = 2 };
+    table[0xC4] = .{ .mnemonic = .CPY, .addressing_mode = .zero_page, .cycles = 3 };
+    table[0xCC] = .{ .mnemonic = .CPY, .addressing_mode = .absolute, .cycles = 4 };
+
     break :blk table;
 };
