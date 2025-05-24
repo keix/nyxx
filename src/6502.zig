@@ -133,6 +133,10 @@ pub const CPU = struct {
             .EOR => self.opEor(instr.addressing_mode),
             .CPX => self.opCpx(instr.addressing_mode),
             .CPY => self.opCpy(instr.addressing_mode),
+            .SED => self.opSed(),
+            .CLD => self.opCld(),
+            .CLV => self.opClv(),
+            .NOP => self.opNop(),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -617,5 +621,22 @@ pub const CPU = struct {
     inline fn opCpy(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
         const value = self.readFrom(addressing_mode);
         self.compare(self.registers.y, value);
+    }
+
+    inline fn opSed(self: *CPU) void {
+        self.registers.flags.d = true;
+    }
+
+    inline fn opCld(self: *CPU) void {
+        self.registers.flags.d = false;
+    }
+
+    inline fn opClv(self: *CPU) void {
+        self.registers.flags.v = false;
+    }
+
+    inline fn opNop(self: *CPU) void {
+        // Do nothing - that's the point!
+        _ = self; // Suppress unused parameter warning
     }
 };

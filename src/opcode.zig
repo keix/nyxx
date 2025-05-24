@@ -249,5 +249,11 @@ pub const instruction_table = blk: {
     table[0xC4] = .{ .mnemonic = .CPY, .addressing_mode = .zero_page, .cycles = 3 };
     table[0xCC] = .{ .mnemonic = .CPY, .addressing_mode = .absolute, .cycles = 4 };
 
+    table[0xF8] = .{ .mnemonic = .SED, .addressing_mode = .implied, .cycles = 2 };
+    table[0xD8] = .{ .mnemonic = .CLD, .addressing_mode = .implied, .cycles = 2 };
+    table[0xB8] = .{ .mnemonic = .CLV, .addressing_mode = .implied, .cycles = 2 };
+
+    table[0xEA] = .{ .mnemonic = .NOP, .addressing_mode = .implied, .cycles = 2 };
+
     break :blk table;
 };

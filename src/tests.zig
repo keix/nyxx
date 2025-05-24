@@ -2556,6 +2556,488 @@ test "CPY common usage patterns" {
     }
 }
 
+test "SED sets decimal flag" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0xF8}, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.d = false;
+    _ = cpu.step(); // SED
+
+    try std.testing.expect(cpu.registers.flags.d == true);
+}
+
+test "SED does not affect other flags" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0xF8}, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Set some other flags
+    cpu.registers.flags.n = true;
+    cpu.registers.flags.z = true;
+    cpu.registers.flags.c = true;
+    cpu.registers.flags.v = true;
+    cpu.registers.flags.i = true;
+    cpu.registers.flags.d = false;
+
+    _ = cpu.step(); // SED
+
+    try std.testing.expect(cpu.registers.flags.d == true); // Changed
+    try std.testing.expect(cpu.registers.flags.n == true); // Unchanged
+    try std.testing.expect(cpu.registers.flags.z == true); // Unchanged
+    try std.testing.expect(cpu.registers.flags.c == true); // Unchanged
+    try std.testing.expect(cpu.registers.flags.v == true); // Unchanged
+    try std.testing.expect(cpu.registers.flags.i == true); // Unchanged
+}
+
+test "CLD clears decimal flag" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0xD8}, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.d = true;
+    _ = cpu.step(); // CLD
+
+    try std.testing.expect(cpu.registers.flags.d == false);
+}
+
+test "CLD does not affect other flags" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0xD8}, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Set all flags
+    cpu.registers.flags.n = true;
+    cpu.registers.flags.z = true;
+    cpu.registers.flags.c = true;
+    cpu.registers.flags.v = true;
+    cpu.registers.flags.i = true;
+    cpu.registers.flags.d = true;
+
+    _ = cpu.step(); // CLD
+
+    try std.testing.expect(cpu.registers.flags.d == false); // Changed
+    try std.testing.expect(cpu.registers.flags.n == true); // Unchanged
+    try std.testing.expect(cpu.registers.flags.z == true); // Unchanged
+    try std.testing.expect(cpu.registers.flags.c == true); // Unchanged
+    try std.testing.expect(cpu.registers.flags.v == true); // Unchanged
+    try std.testing.expect(cpu.registers.flags.i == true); // Unchanged
+}
+
+test "CLV clears overflow flag" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0xB8}, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.v = true;
+    _ = cpu.step(); // CLV
+
+    try std.testing.expect(cpu.registers.flags.v == false);
+}
+
+test "CLV does not affect other flags" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0xB8}, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Set all flags
+    cpu.registers.flags.n = true;
+    cpu.registers.flags.z = true;
+    cpu.registers.flags.c = true;
+    cpu.registers.flags.v = true;
+    cpu.registers.flags.i = true;
+    cpu.registers.flags.d = true;
+
+    _ = cpu.step(); // CLV
+
+    try std.testing.expect(cpu.registers.flags.v == false); // Changed
+    try std.testing.expect(cpu.registers.flags.n == true); // Unchanged
+    try std.testing.expect(cpu.registers.flags.z == true); // Unchanged
+    try std.testing.expect(cpu.registers.flags.c == true); // Unchanged
+    try std.testing.expect(cpu.registers.flags.i == true); // Unchanged
+    try std.testing.expect(cpu.registers.flags.d == true); // Unchanged
+}
+
+test "flag instructions cycle count" {
+    const allocator = std.testing.allocator;
+
+    // SED - 2 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{0xF8}, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        const cycles = cpu.step(); // SED
+        try std.testing.expect(cycles == 2);
+    }
+
+    // CLD - 2 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{0xD8}, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        const cycles = cpu.step(); // CLD
+        try std.testing.expect(cycles == 2);
+    }
+
+    // CLV - 2 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{0xB8}, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        const cycles = cpu.step(); // CLV
+        try std.testing.expect(cycles == 2);
+    }
+}
+
+test "decimal flag sequence" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xF8, // SED
+        0xD8, // CLD
+        0xF8, // SED
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Initially false
+    try std.testing.expect(cpu.registers.flags.d == false);
+
+    _ = cpu.step(); // SED
+    try std.testing.expect(cpu.registers.flags.d == true);
+
+    _ = cpu.step(); // CLD
+    try std.testing.expect(cpu.registers.flags.d == false);
+
+    _ = cpu.step(); // SED
+    try std.testing.expect(cpu.registers.flags.d == true);
+}
+
+test "overflow flag can only be cleared, not set by CLV" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xB8, // CLV
+        0xB8, // CLV (again)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Set overflow flag manually (simulating arithmetic operation)
+    cpu.registers.flags.v = true;
+
+    _ = cpu.step(); // CLV
+    try std.testing.expect(cpu.registers.flags.v == false);
+
+    // CLV again should not change anything
+    _ = cpu.step(); // CLV
+    try std.testing.expect(cpu.registers.flags.v == false);
+}
+
+test "flag instructions in combination with arithmetic" {
+    const allocator = std.testing.allocator;
+
+    // Test overflow flag clearing after ADC operation
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, 0x7F, // LDA #$7F
+            0x69, 0x01, // ADC #$01  ; Should set overflow flag (0x7F + 0x01 = 0x80)
+            0xB8, // CLV       ; Clear overflow flag
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA #$7F
+        _ = cpu.step(); // ADC #$01
+
+        // Overflow should be set
+        try std.testing.expect(cpu.registers.flags.v == true);
+
+        _ = cpu.step(); // CLV
+
+        // Overflow should be cleared
+        try std.testing.expect(cpu.registers.flags.v == false);
+        // Other flags should be unchanged
+        try std.testing.expect(cpu.registers.flags.n == true); // Result was 0x80 (negative)
+        try std.testing.expect(cpu.registers.flags.z == false); // Result was not zero
+    }
+}
+
+test "decimal mode flag for BCD operations" {
+    const allocator = std.testing.allocator;
+
+    // Note: NES doesn't actually use decimal mode, but the flag should still work
+    const rom = try buildTestRom(allocator, &.{
+        0xF8, // SED       ; Set decimal mode
+        0xA9, 0x09, // LDA #$09
+        0x69, 0x01, // ADC #$01  ; In decimal mode, this would be 09 + 01 = 10 (BCD)
+        0xD8, // CLD       ; Clear decimal mode
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // SED
+    try std.testing.expect(cpu.registers.flags.d == true);
+
+    _ = cpu.step(); // LDA #$09
+    _ = cpu.step(); // ADC #$01
+
+    // In NES, decimal mode is ignored, so result should be binary: 0x09 + 0x01 = 0x0A
+    try std.testing.expect(cpu.registers.a == 0x0A);
+
+    _ = cpu.step(); // CLD
+    try std.testing.expect(cpu.registers.flags.d == false);
+}
+
+test "NOP does absolutely nothing" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0xEA}, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Save initial state
+    const initial_a = cpu.registers.a;
+    const initial_x = cpu.registers.x;
+    const initial_y = cpu.registers.y;
+    const initial_s = cpu.registers.s;
+    const initial_flags = cpu.registers.flags;
+    const initial_pc = cpu.registers.pc;
+
+    _ = cpu.step(); // NOP
+
+    // Everything should be exactly the same except PC
+    try std.testing.expect(cpu.registers.a == initial_a);
+    try std.testing.expect(cpu.registers.x == initial_x);
+    try std.testing.expect(cpu.registers.y == initial_y);
+    try std.testing.expect(cpu.registers.s == initial_s);
+
+    // Check all flags individually
+    try std.testing.expect(cpu.registers.flags.n == initial_flags.n);
+    try std.testing.expect(cpu.registers.flags.v == initial_flags.v);
+    try std.testing.expect(cpu.registers.flags.b == initial_flags.b);
+    try std.testing.expect(cpu.registers.flags.d == initial_flags.d);
+    try std.testing.expect(cpu.registers.flags.i == initial_flags.i);
+    try std.testing.expect(cpu.registers.flags.z == initial_flags.z);
+    try std.testing.expect(cpu.registers.flags.c == initial_flags.c);
+
+    // PC should have advanced by 1 (for the NOP opcode)
+    try std.testing.expect(cpu.registers.pc == initial_pc + 1);
+}
+
+test "NOP cycle count" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0xEA}, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    const cycles = cpu.step(); // NOP
+    try std.testing.expect(cycles == 2);
+}
+
+test "multiple NOPs in sequence" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xEA, // NOP
+        0xEA, // NOP
+        0xEA, // NOP
+        0xEA, // NOP
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    const initial_pc = cpu.registers.pc;
+
+    _ = cpu.step(); // NOP 1
+    try std.testing.expect(cpu.registers.pc == initial_pc + 1);
+
+    _ = cpu.step(); // NOP 2
+    try std.testing.expect(cpu.registers.pc == initial_pc + 2);
+
+    _ = cpu.step(); // NOP 3
+    try std.testing.expect(cpu.registers.pc == initial_pc + 3);
+
+    _ = cpu.step(); // NOP 4
+    try std.testing.expect(cpu.registers.pc == initial_pc + 4);
+}
+
+test "NOP between meaningful operations" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA9, 0x42, // LDA #$42
+        0xEA, // NOP
+        0xAA, // TAX
+        0xEA, // NOP
+        0xE8, // INX
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$42
+    try std.testing.expect(cpu.registers.a == 0x42);
+
+    _ = cpu.step(); // NOP
+    try std.testing.expect(cpu.registers.a == 0x42); // Unchanged
+
+    _ = cpu.step(); // TAX
+    try std.testing.expect(cpu.registers.x == 0x42);
+
+    _ = cpu.step(); // NOP
+    try std.testing.expect(cpu.registers.x == 0x42); // Unchanged
+
+    _ = cpu.step(); // INX
+    try std.testing.expect(cpu.registers.x == 0x43);
+}
+
+test "NOP with all flags set" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0xEA}, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Set all flags to true
+    cpu.registers.flags.n = true;
+    cpu.registers.flags.v = true;
+    cpu.registers.flags.b = true;
+    cpu.registers.flags.d = true;
+    cpu.registers.flags.i = true;
+    cpu.registers.flags.z = true;
+    cpu.registers.flags.c = true;
+
+    _ = cpu.step(); // NOP
+
+    // All flags should remain set
+    try std.testing.expect(cpu.registers.flags.n == true);
+    try std.testing.expect(cpu.registers.flags.v == true);
+    try std.testing.expect(cpu.registers.flags.b == true);
+    try std.testing.expect(cpu.registers.flags.d == true);
+    try std.testing.expect(cpu.registers.flags.i == true);
+    try std.testing.expect(cpu.registers.flags.z == true);
+    try std.testing.expect(cpu.registers.flags.c == true);
+}
+
+test "NOP with modified registers" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0xEA}, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Set registers to specific values
+    cpu.registers.a = 0xFF;
+    cpu.registers.x = 0x80;
+    cpu.registers.y = 0x01;
+    cpu.registers.s = 0x50;
+
+    _ = cpu.step(); // NOP
+
+    // All registers should remain unchanged
+    try std.testing.expect(cpu.registers.a == 0xFF);
+    try std.testing.expect(cpu.registers.x == 0x80);
+    try std.testing.expect(cpu.registers.y == 0x01);
+    try std.testing.expect(cpu.registers.s == 0x50);
+}
+
+test "NOP timing in real program context" {
+    const allocator = std.testing.allocator;
+
+    // Simulate a timing-sensitive sequence where NOP might be used for delay
+    const rom = try buildTestRom(allocator, &.{
+        0xA9, 0x00, // LDA #$00    (2 cycles)
+        0xEA, // NOP         (2 cycles)
+        0xEA, // NOP         (2 cycles)
+        0xEA, // NOP         (2 cycles)
+        0x69, 0x01, // ADC #$01    (2 cycles)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    var total_cycles: u32 = 0;
+
+    total_cycles += cpu.step(); // LDA #$00
+    try std.testing.expect(cpu.registers.a == 0x00);
+
+    total_cycles += cpu.step(); // NOP 1
+    total_cycles += cpu.step(); // NOP 2
+    total_cycles += cpu.step(); // NOP 3
+
+    total_cycles += cpu.step(); // ADC #$01
+    try std.testing.expect(cpu.registers.a == 0x01);
+
+    // Total should be 2 + 2 + 2 + 2 + 2 = 10 cycles
+    try std.testing.expect(total_cycles == 10);
+}
+
+test "NOP is truly the easiest instruction to implement" {
+    // This test exists to celebrate the simplicity of NOP!
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{0xEA}, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Before NOP
+    const before_state = cpu.registers;
+
+    const cycles = cpu.step(); // NOP
+
+    // After NOP - only PC should change
+    try std.testing.expect(cpu.registers.a == before_state.a);
+    try std.testing.expect(cpu.registers.x == before_state.x);
+    try std.testing.expect(cpu.registers.y == before_state.y);
+    try std.testing.expect(cpu.registers.s == before_state.s);
+    try std.testing.expect(cpu.registers.pc == before_state.pc + 1);
+    try std.testing.expect(cycles == 2);
+
+    // NOP: The instruction that does nothing, perfectly!
+}
+
 // Test for STA with PPU registers
 test "STA stores A into $2000 and updates PPUCTRL" {
     const allocator = std.testing.allocator;
