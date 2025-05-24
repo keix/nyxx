@@ -153,6 +153,7 @@ pub const CPU = struct {
             .ASL => self.opAsl(instr.addressing_mode),
             .ROL => self.opRol(instr.addressing_mode),
             .ROR => self.opRor(instr.addressing_mode),
+            .BRK => self.opBrk(),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -718,5 +719,20 @@ pub const CPU = struct {
 
     inline fn opRor(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
         self.performShiftOperation(addressing_mode, .ror);
+    }
+
+    inline fn opBrk(self: *CPU) void {
+        const return_addr = self.registers.pc + 1;
+        self.push(@as(u8, @truncate(return_addr >> 8)));
+        self.push(@as(u8, @truncate(return_addr & 0xFF)));
+
+        const flags = self.registers.flags.toByte() | 0b00110000;
+        self.push(flags);
+
+        self.registers.flags.i = true;
+
+        const low = self.readMemory(0xFFFE);
+        const high = self.readMemory(0xFFFF);
+        self.registers.pc = (@as(u16, high) << 8) | low;
     }
 };

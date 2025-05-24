@@ -1,5 +1,3 @@
-// opcode.zig
-
 pub const Mnemonic = enum {
     ADC,
     AND,
@@ -276,6 +274,7 @@ pub const instruction_table = blk: {
     table[0x6E] = .{ .mnemonic = .ROR, .addressing_mode = .absolute, .cycles = 6 };
     table[0x7E] = .{ .mnemonic = .ROR, .addressing_mode = .absolute_x, .cycles = 7 };
 
+    table[0x00] = .{ .mnemonic = .BRK, .addressing_mode = .implied, .cycles = 7 };
     table[0xEA] = .{ .mnemonic = .NOP, .addressing_mode = .implied, .cycles = 2 };
 
     break :blk table;

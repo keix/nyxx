@@ -3801,6 +3801,33 @@ test "NOP is truly the easiest instruction to implement" {
     // NOP: The instruction that does nothing, perfectly!
 }
 
+test "BRK sets correct stack and vectors" {
+    const allocator = std.testing.allocator;
+
+    var rom = try buildTestRom(allocator, &.{0x00}, 0x8000); // BRK at $8000
+    defer allocator.free(rom);
+
+    // Set IRQ/BRK vector
+    rom[0xFFFE] = 0x34;
+    rom[0xFFFF] = 0x12;
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    const initial_sp = cpu.registers.s;
+    cpu.registers.flags.z = true;
+
+    _ = cpu.step(); // Execute BRK
+
+    try std.testing.expect(cpu.registers.pc == 0x1234);
+    try std.testing.expect(cpu.registers.flags.i == true);
+    try std.testing.expect(cpu.registers.s == initial_sp - 3);
+
+    const stack_addr = 0x0100 + @as(u16, initial_sp) - 2;
+    const pushed_flags = bus.read(stack_addr);
+    try std.testing.expect((pushed_flags & 0b00110000) == 0b00110000);
+}
+
 // Test for STA with PPU registers
 test "STA stores A into $2000 and updates PPUCTRL" {
     const allocator = std.testing.allocator;
