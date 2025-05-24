@@ -47,6 +47,18 @@ const Registers = struct {
     flags: Flags = .{},
 };
 
+const ShiftResult = struct {
+    value: u8,
+    carry: bool,
+};
+
+const ShiftOperation = enum {
+    lsr, // Logical Shift Right
+    asl, // Arithmetic Shift Left
+    ror, // Rotate Right
+    rol, // Rotate Left
+};
+
 pub const CPU = struct {
     registers: Registers,
     bus: *Bus,
@@ -137,6 +149,10 @@ pub const CPU = struct {
             .CLD => self.opCld(),
             .CLV => self.opClv(),
             .NOP => self.opNop(),
+            .LSR => self.opLsr(instr.addressing_mode),
+            .ASL => self.opAsl(instr.addressing_mode),
+            .ROL => self.opRol(instr.addressing_mode),
+            .ROR => self.opRor(instr.addressing_mode),
             // Add more opcodes as needed
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
@@ -231,6 +247,54 @@ pub const CPU = struct {
             else => unreachable,
         };
         self.writeMemory(addr, value);
+    }
+
+    inline fn performShiftOperation(self: *CPU, addressing_mode: Opcode.AddressingMode, operation: ShiftOperation) void {
+        switch (addressing_mode) {
+            .accumulator => {
+                const result = self.shiftValue(self.registers.a, operation);
+                self.registers.a = result.value;
+                self.registers.flags.c = result.carry;
+                self.updateZN(result.value);
+            },
+            else => {
+                const addr = self.getAddress(addressing_mode);
+                const value = self.readMemory(addr);
+
+                const result = self.shiftValue(value, operation);
+
+                self.writeMemory(addr, result.value);
+                self.registers.flags.c = result.carry;
+                self.updateZN(result.value);
+            },
+        }
+    }
+
+    inline fn shiftValue(self: *CPU, value: u8, operation: ShiftOperation) ShiftResult {
+        var result: ShiftResult = undefined;
+
+        switch (operation) {
+            .lsr => {
+                result.value = value >> 1;
+                result.carry = (value & 0x01) != 0;
+            },
+            .asl => {
+                result.value = value << 1;
+                result.carry = (value & 0x80) != 0;
+            },
+            .rol => {
+                const carry_in = @intFromBool(self.registers.flags.c); // 0 or 1
+                result.value = (value << 1) | carry_in;
+                result.carry = (value & 0x80) != 0;
+            },
+            .ror => {
+                const carry_in = @as(u8, @intFromBool(self.registers.flags.c)) << 7; // 0x00 or 0x80
+                result.value = (value >> 1) | carry_in;
+                result.carry = (value & 0x01) != 0;
+            },
+        }
+
+        return result;
     }
 
     inline fn getAddress(self: *CPU, mode: Opcode.AddressingMode) u16 {
@@ -637,6 +701,22 @@ pub const CPU = struct {
 
     inline fn opNop(self: *CPU) void {
         // Do nothing - that's the point!
-        _ = self; // Suppress unused parameter warning
+        _ = self;
+    }
+
+    inline fn opLsr(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+        self.performShiftOperation(addressing_mode, .lsr);
+    }
+
+    inline fn opAsl(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+        self.performShiftOperation(addressing_mode, .asl);
+    }
+
+    inline fn opRol(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+        self.performShiftOperation(addressing_mode, .rol);
+    }
+
+    inline fn opRor(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+        self.performShiftOperation(addressing_mode, .ror);
     }
 };

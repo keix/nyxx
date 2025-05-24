@@ -252,6 +252,30 @@ pub const instruction_table = blk: {
     table[0xD8] = .{ .mnemonic = .CLD, .addressing_mode = .implied, .cycles = 2 };
     table[0xB8] = .{ .mnemonic = .CLV, .addressing_mode = .implied, .cycles = 2 };
 
+    table[0x4A] = .{ .mnemonic = .LSR, .addressing_mode = .accumulator, .cycles = 2 };
+    table[0x46] = .{ .mnemonic = .LSR, .addressing_mode = .zero_page, .cycles = 5 };
+    table[0x56] = .{ .mnemonic = .LSR, .addressing_mode = .zero_page_x, .cycles = 6 };
+    table[0x4E] = .{ .mnemonic = .LSR, .addressing_mode = .absolute, .cycles = 6 };
+    table[0x5E] = .{ .mnemonic = .LSR, .addressing_mode = .absolute_x, .cycles = 7 };
+
+    table[0x0A] = .{ .mnemonic = .ASL, .addressing_mode = .accumulator, .cycles = 2 };
+    table[0x06] = .{ .mnemonic = .ASL, .addressing_mode = .zero_page, .cycles = 5 };
+    table[0x16] = .{ .mnemonic = .ASL, .addressing_mode = .zero_page_x, .cycles = 6 };
+    table[0x0E] = .{ .mnemonic = .ASL, .addressing_mode = .absolute, .cycles = 6 };
+    table[0x1E] = .{ .mnemonic = .ASL, .addressing_mode = .absolute_x, .cycles = 7 };
+
+    table[0x2A] = .{ .mnemonic = .ROL, .addressing_mode = .accumulator, .cycles = 2 };
+    table[0x26] = .{ .mnemonic = .ROL, .addressing_mode = .zero_page, .cycles = 5 };
+    table[0x36] = .{ .mnemonic = .ROL, .addressing_mode = .zero_page_x, .cycles = 6 };
+    table[0x2E] = .{ .mnemonic = .ROL, .addressing_mode = .absolute, .cycles = 6 };
+    table[0x3E] = .{ .mnemonic = .ROL, .addressing_mode = .absolute_x, .cycles = 7 };
+
+    table[0x6A] = .{ .mnemonic = .ROR, .addressing_mode = .accumulator, .cycles = 2 };
+    table[0x66] = .{ .mnemonic = .ROR, .addressing_mode = .zero_page, .cycles = 5 };
+    table[0x76] = .{ .mnemonic = .ROR, .addressing_mode = .zero_page_x, .cycles = 6 };
+    table[0x6E] = .{ .mnemonic = .ROR, .addressing_mode = .absolute, .cycles = 6 };
+    table[0x7E] = .{ .mnemonic = .ROR, .addressing_mode = .absolute_x, .cycles = 7 };
+
     table[0xEA] = .{ .mnemonic = .NOP, .addressing_mode = .implied, .cycles = 2 };
 
     break :blk table;

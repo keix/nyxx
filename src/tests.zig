@@ -3013,6 +3013,769 @@ test "NOP timing in real program context" {
     try std.testing.expect(total_cycles == 10);
 }
 
+test "LSR accumulator - basic shift" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x02, 0x4A }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$02
+    try std.testing.expect(cpu.registers.a == 0x02);
+
+    _ = cpu.step(); // LSR A
+    try std.testing.expect(cpu.registers.a == 0x01);
+    try std.testing.expect(cpu.registers.flags.c == false); // No carry out
+    try std.testing.expect(cpu.registers.flags.z == false); // Result not zero
+    try std.testing.expect(cpu.registers.flags.n == false); // Always positive
+}
+
+test "LSR accumulator - carry out" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x03, 0x4A }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$03
+    _ = cpu.step(); // LSR A
+
+    try std.testing.expect(cpu.registers.a == 0x01);
+    try std.testing.expect(cpu.registers.flags.c == true); // Carry out from bit 0
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "LSR accumulator - result zero" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x01, 0x4A }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$01
+    _ = cpu.step(); // LSR A
+
+    try std.testing.expect(cpu.registers.a == 0x00);
+    try std.testing.expect(cpu.registers.flags.c == true); // Carry out
+    try std.testing.expect(cpu.registers.flags.z == true); // Result is zero
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "LSR accumulator - large value" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0xFE, 0x4A }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$FE (11111110)
+    _ = cpu.step(); // LSR A
+
+    try std.testing.expect(cpu.registers.a == 0x7F); // 01111111
+    try std.testing.expect(cpu.registers.flags.c == false); // No carry out
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false); // Always positive after LSR
+}
+
+test "LSR zero page" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x46, 0x10 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0010, 0x0A); // 00001010
+
+    _ = cpu.step(); // LSR $10
+
+    try std.testing.expect(bus.read(0x0010) == 0x05); // 00000101
+    try std.testing.expect(cpu.registers.flags.c == false); // No carry out
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "LSR zero page,X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA2, 0x05, 0x56, 0x10 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0015, 0x07); // 00000111
+
+    _ = cpu.step(); // LDX #$05
+    _ = cpu.step(); // LSR $10,X (→ $15)
+
+    try std.testing.expect(bus.read(0x0015) == 0x03); // 00000011
+    try std.testing.expect(cpu.registers.flags.c == true); // Carry out from bit 0
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "LSR absolute" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x4E, 0x00, 0x02 }, 0x8000); // 0x0200に変更
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0200, 0x80); // RAM領域に書き込み
+
+    _ = cpu.step(); // LSR $0200
+
+    try std.testing.expect(bus.read(0x0200) == 0x40);
+}
+
+test "LSR absolute,X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA2, 0x02, 0x5E, 0x00, 0x02 }, 0x8000); // 0x0200に変更
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0202, 0xFF); // 0x0200 + X(2) = 0x0202
+
+    _ = cpu.step(); // LDX #$02
+    _ = cpu.step(); // LSR $0200,X (→ $0202)
+
+    try std.testing.expect(bus.read(0x0202) == 0x7F);
+    try std.testing.expect(cpu.registers.flags.c == true);
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "LSR cycle counts" {
+    const allocator = std.testing.allocator;
+
+    // Accumulator mode - 2 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA9, 0x02, 0x4A }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        const cycles = cpu.step(); // LSR A
+        try std.testing.expect(cycles == 2);
+    }
+
+    // Zero page mode - 5 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0x46, 0x10 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x0010, 0x02);
+
+        const cycles = cpu.step(); // LSR $10
+        try std.testing.expect(cycles == 5);
+    }
+
+    // Zero page,X mode - 6 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA2, 0x05, 0x56, 0x10 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x0015, 0x02);
+
+        _ = cpu.step(); // LDX
+        const cycles = cpu.step(); // LSR $10,X
+        try std.testing.expect(cycles == 6);
+    }
+
+    // Absolute mode - 6 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0x4E, 0x00, 0x30 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x3000, 0x02);
+
+        const cycles = cpu.step(); // LSR $3000
+        try std.testing.expect(cycles == 6);
+    }
+
+    // Absolute,X mode - 7 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA2, 0x02, 0x5E, 0x00, 0x30 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x3002, 0x02);
+
+        _ = cpu.step(); // LDX
+        const cycles = cpu.step(); // LSR $3000,X
+        try std.testing.expect(cycles == 7);
+    }
+}
+
+test "LSR flag combinations" {
+    const allocator = std.testing.allocator;
+
+    // Test all possible last bit combinations
+    const test_cases = [_]struct { input: u8, expected_result: u8, expected_carry: bool }{
+        .{ .input = 0x00, .expected_result = 0x00, .expected_carry = false },
+        .{ .input = 0x01, .expected_result = 0x00, .expected_carry = true },
+        .{ .input = 0x02, .expected_result = 0x01, .expected_carry = false },
+        .{ .input = 0x03, .expected_result = 0x01, .expected_carry = true },
+        .{ .input = 0xFE, .expected_result = 0x7F, .expected_carry = false },
+        .{ .input = 0xFF, .expected_result = 0x7F, .expected_carry = true },
+    };
+
+    for (test_cases) |case| {
+        const rom = try buildTestRom(allocator, &.{ 0xA9, case.input, 0x4A }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // LSR A
+
+        try std.testing.expect(cpu.registers.a == case.expected_result);
+        try std.testing.expect(cpu.registers.flags.c == case.expected_carry);
+        try std.testing.expect(cpu.registers.flags.z == (case.expected_result == 0));
+        try std.testing.expect(cpu.registers.flags.n == false); // LSR always clears N
+    }
+}
+
+test "LSR does not affect other registers" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x0A, 0x4A }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Set other registers
+    cpu.registers.x = 0x11;
+    cpu.registers.y = 0x22;
+    cpu.registers.s = 0x33;
+
+    _ = cpu.step(); // LDA #$0A
+    _ = cpu.step(); // LSR A
+
+    // Other registers should be unchanged
+    try std.testing.expect(cpu.registers.x == 0x11);
+    try std.testing.expect(cpu.registers.y == 0x22);
+    try std.testing.expect(cpu.registers.s == 0x33);
+}
+
+test "LSR practical usage - divide by 2" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA9, 0x14, // LDA #$14 (20 decimal)
+        0x4A, // LSR A    (divide by 2)
+        0x4A, // LSR A    (divide by 2 again)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$14 (20)
+    try std.testing.expect(cpu.registers.a == 20);
+
+    _ = cpu.step(); // LSR A (20 / 2 = 10)
+    try std.testing.expect(cpu.registers.a == 10);
+    try std.testing.expect(cpu.registers.flags.c == false);
+
+    _ = cpu.step(); // LSR A (10 / 2 = 5)
+    try std.testing.expect(cpu.registers.a == 5);
+    try std.testing.expect(cpu.registers.flags.c == false);
+}
+
+test "ASL accumulator - basic shift" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x01, 0x0A }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$01
+    try std.testing.expect(cpu.registers.a == 0x01);
+
+    _ = cpu.step(); // ASL A
+    try std.testing.expect(cpu.registers.a == 0x02);
+    try std.testing.expect(cpu.registers.flags.c == false); // No carry out
+    try std.testing.expect(cpu.registers.flags.z == false); // Result not zero
+    try std.testing.expect(cpu.registers.flags.n == false); // Result positive
+}
+
+test "ASL accumulator - carry out" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x80, 0x0A }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$80 (10000000)
+    _ = cpu.step(); // ASL A
+
+    try std.testing.expect(cpu.registers.a == 0x00); // 00000000
+    try std.testing.expect(cpu.registers.flags.c == true); // Carry out from bit 7
+    try std.testing.expect(cpu.registers.flags.z == true); // Result is zero
+    try std.testing.expect(cpu.registers.flags.n == false); // Result is 0
+}
+
+test "ASL accumulator - sets negative flag" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x40, 0x0A }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$40 (01000000)
+    _ = cpu.step(); // ASL A
+
+    try std.testing.expect(cpu.registers.a == 0x80); // 10000000
+    try std.testing.expect(cpu.registers.flags.c == false); // No carry out
+    try std.testing.expect(cpu.registers.flags.z == false); // Result not zero
+    try std.testing.expect(cpu.registers.flags.n == true); // Negative bit set
+}
+
+test "ASL accumulator - carry and negative" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0xC0, 0x0A }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$C0 (11000000)
+    _ = cpu.step(); // ASL A
+
+    try std.testing.expect(cpu.registers.a == 0x80); // 10000000
+    try std.testing.expect(cpu.registers.flags.c == true); // Carry out from bit 7
+    try std.testing.expect(cpu.registers.flags.z == false); // Result not zero
+    try std.testing.expect(cpu.registers.flags.n == true); // Negative bit set
+}
+
+test "ASL zero page" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x06, 0x10 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0010, 0x05); // 00000101
+
+    _ = cpu.step(); // ASL $10
+
+    try std.testing.expect(bus.read(0x0010) == 0x0A); // 00001010
+    try std.testing.expect(cpu.registers.flags.c == false); // No carry out
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "ASL zero page,X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA2, 0x03, 0x16, 0x10 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0013, 0x07); // 00000111
+
+    _ = cpu.step(); // LDX #$03
+    _ = cpu.step(); // ASL $10,X (→ $13)
+
+    try std.testing.expect(bus.read(0x0013) == 0x0E); // 00001110
+    try std.testing.expect(cpu.registers.flags.c == false); // No carry out
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "ASL absolute" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x0E, 0x00, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0200, 0x20); // 00100000
+
+    _ = cpu.step(); // ASL $0200
+
+    try std.testing.expect(bus.read(0x0200) == 0x40); // 01000000
+    try std.testing.expect(cpu.registers.flags.c == false); // No carry out
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "ASL absolute,X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA2, 0x04, 0x1E, 0x00, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0204, 0x81); // 10000001
+
+    _ = cpu.step(); // LDX #$04
+    _ = cpu.step(); // ASL $0200,X (→ $0204)
+
+    try std.testing.expect(bus.read(0x0204) == 0x02); // 00000010
+    try std.testing.expect(cpu.registers.flags.c == true); // Carry out from bit 7
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "ASL cycle counts" {
+    const allocator = std.testing.allocator;
+
+    // Accumulator mode - 2 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA9, 0x01, 0x0A }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        const cycles = cpu.step(); // ASL A
+        try std.testing.expect(cycles == 2);
+    }
+
+    // Zero page mode - 5 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0x06, 0x10 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x0010, 0x01);
+
+        const cycles = cpu.step(); // ASL $10
+        try std.testing.expect(cycles == 5);
+    }
+
+    // Zero page,X mode - 6 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA2, 0x03, 0x16, 0x10 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x0013, 0x01);
+
+        _ = cpu.step(); // LDX
+        const cycles = cpu.step(); // ASL $10,X
+        try std.testing.expect(cycles == 6);
+    }
+
+    // Absolute mode - 6 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0x0E, 0x00, 0x02 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x0200, 0x01);
+
+        const cycles = cpu.step(); // ASL $0200
+        try std.testing.expect(cycles == 6);
+    }
+
+    // Absolute,X mode - 7 cycles
+    {
+        const rom = try buildTestRom(allocator, &.{ 0xA2, 0x04, 0x1E, 0x00, 0x02 }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+        bus.write(0x0204, 0x01);
+
+        _ = cpu.step(); // LDX
+        const cycles = cpu.step(); // ASL $0200,X
+        try std.testing.expect(cycles == 7);
+    }
+}
+
+test "ASL flag combinations" {
+    const allocator = std.testing.allocator;
+
+    // Test all possible top bit combinations
+    const test_cases = [_]struct { input: u8, expected_result: u8, expected_carry: bool }{
+        .{ .input = 0x00, .expected_result = 0x00, .expected_carry = false },
+        .{ .input = 0x01, .expected_result = 0x02, .expected_carry = false },
+        .{ .input = 0x7F, .expected_result = 0xFE, .expected_carry = false },
+        .{ .input = 0x80, .expected_result = 0x00, .expected_carry = true },
+        .{ .input = 0x81, .expected_result = 0x02, .expected_carry = true },
+        .{ .input = 0xFF, .expected_result = 0xFE, .expected_carry = true },
+    };
+
+    for (test_cases) |case| {
+        const rom = try buildTestRom(allocator, &.{ 0xA9, case.input, 0x0A }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        _ = cpu.step(); // LDA
+        _ = cpu.step(); // ASL A
+
+        try std.testing.expect(cpu.registers.a == case.expected_result);
+        try std.testing.expect(cpu.registers.flags.c == case.expected_carry);
+        try std.testing.expect(cpu.registers.flags.z == (case.expected_result == 0));
+        try std.testing.expect(cpu.registers.flags.n == ((case.expected_result & 0x80) != 0));
+    }
+}
+
+test "ASL does not affect other registers" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x05, 0x0A }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    // Set other registers
+    cpu.registers.x = 0x11;
+    cpu.registers.y = 0x22;
+    cpu.registers.s = 0x33;
+
+    _ = cpu.step(); // LDA #$05
+    _ = cpu.step(); // ASL A
+
+    // Other registers should be unchanged
+    try std.testing.expect(cpu.registers.x == 0x11);
+    try std.testing.expect(cpu.registers.y == 0x22);
+    try std.testing.expect(cpu.registers.s == 0x33);
+}
+
+test "ASL practical usage - multiply by 2" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA9, 0x05, // LDA #$05 (5 decimal)
+        0x0A, // ASL A    (multiply by 2)
+        0x0A, // ASL A    (multiply by 2 again)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$05 (5)
+    try std.testing.expect(cpu.registers.a == 5);
+
+    _ = cpu.step(); // ASL A (5 * 2 = 10)
+    try std.testing.expect(cpu.registers.a == 10);
+    try std.testing.expect(cpu.registers.flags.c == false);
+
+    _ = cpu.step(); // ASL A (10 * 2 = 20)
+    try std.testing.expect(cpu.registers.a == 20);
+    try std.testing.expect(cpu.registers.flags.c == false);
+}
+
+test "ASL overflow example" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{
+        0xA9, 0x90, // LDA #$90 (144 decimal)
+        0x0A, // ASL A    (would overflow in signed arithmetic)
+    }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    _ = cpu.step(); // LDA #$90
+    _ = cpu.step(); // ASL A
+
+    try std.testing.expect(cpu.registers.a == 0x20); // 144 * 2 = 288, truncated to 32
+    try std.testing.expect(cpu.registers.flags.c == true); // Carry out indicates overflow
+    try std.testing.expect(cpu.registers.flags.n == false); // Result is positive
+}
+
+test "ROL accumulator - basic rotate" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x81, 0x2A }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.c = false; // Clear carry initially
+
+    _ = cpu.step(); // LDA #$81 (10000001)
+    _ = cpu.step(); // ROL A
+
+    try std.testing.expect(cpu.registers.a == 0x02); // 00000010 (carry was 0)
+    try std.testing.expect(cpu.registers.flags.c == true); // Carry out from bit 7
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "ROL accumulator - with carry in" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x40, 0x2A }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.c = true; // Set carry initially
+
+    _ = cpu.step(); // LDA #$40 (01000000)
+    _ = cpu.step(); // ROL A
+
+    try std.testing.expect(cpu.registers.a == 0x81); // 10000001 (carry was 1)
+    try std.testing.expect(cpu.registers.flags.c == false); // No carry out
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true); // Negative flag set
+}
+
+test "ROR accumulator - basic rotate" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x81, 0x6A }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.c = false; // Clear carry initially
+
+    _ = cpu.step(); // LDA #$81 (10000001)
+    _ = cpu.step(); // ROR A
+
+    try std.testing.expect(cpu.registers.a == 0x40); // 01000000 (carry was 0)
+    try std.testing.expect(cpu.registers.flags.c == true); // Carry out from bit 0
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "ROR accumulator - with carry in" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA9, 0x02, 0x6A }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    cpu.registers.flags.c = true; // Set carry initially
+
+    _ = cpu.step(); // LDA #$02 (00000010)
+    _ = cpu.step(); // ROR A
+
+    try std.testing.expect(cpu.registers.a == 0x81); // 10000001 (carry was 1)
+    try std.testing.expect(cpu.registers.flags.c == false); // No carry out
+    try std.testing.expect(cpu.registers.flags.z == false);
+    try std.testing.expect(cpu.registers.flags.n == true); // Negative flag set
+}
+
+test "ROL zero page" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0x26, 0x10 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0010, 0x55); // 01010101
+    cpu.registers.flags.c = true; // Set carry
+
+    _ = cpu.step(); // ROL $10
+
+    try std.testing.expect(bus.read(0x0010) == 0xAB); // 10101011
+    try std.testing.expect(cpu.registers.flags.c == false); // No carry out
+    try std.testing.expect(cpu.registers.flags.n == true); // Negative
+}
+
+test "ROR absolute,X" {
+    const allocator = std.testing.allocator;
+    const rom = try buildTestRom(allocator, &.{ 0xA2, 0x03, 0x7E, 0x00, 0x02 }, 0x8000);
+    defer allocator.free(rom);
+
+    var bus = Bus.init(rom);
+    var cpu = CPU.init(&bus);
+
+    bus.write(0x0203, 0xAA); // 10101010
+    cpu.registers.flags.c = false; // Clear carry
+
+    _ = cpu.step(); // LDX #$03
+    _ = cpu.step(); // ROR $0200,X (→ $0203)
+
+    try std.testing.expect(bus.read(0x0203) == 0x55); // 01010101
+    try std.testing.expect(cpu.registers.flags.c == false); // No carry out
+    try std.testing.expect(cpu.registers.flags.n == false);
+}
+
+test "Rotate operations comprehensive" {
+    const allocator = std.testing.allocator;
+
+    // Test 8-bit rotation with carry
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, 0x01, // LDA #$01
+            0x2A, // ROL A (→ 0x02, C=0)
+            0x2A, // ROL A (→ 0x04, C=0)
+            0x2A, // ROL A (→ 0x08, C=0)
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        cpu.registers.flags.c = false;
+
+        _ = cpu.step(); // LDA #$01
+        _ = cpu.step(); // ROL A
+        try std.testing.expect(cpu.registers.a == 0x02);
+
+        _ = cpu.step(); // ROL A
+        try std.testing.expect(cpu.registers.a == 0x04);
+
+        _ = cpu.step(); // ROL A
+        try std.testing.expect(cpu.registers.a == 0x08);
+    }
+
+    // Test carry propagation through rotate
+    {
+        const rom = try buildTestRom(allocator, &.{
+            0xA9, 0x80, // LDA #$80
+            0x2A, // ROL A (→ 0x00, C=1)
+            0x2A, // ROL A (→ 0x01, C=0)
+        }, 0x8000);
+        defer allocator.free(rom);
+
+        var bus = Bus.init(rom);
+        var cpu = CPU.init(&bus);
+
+        cpu.registers.flags.c = false;
+
+        _ = cpu.step(); // LDA #$80
+        _ = cpu.step(); // ROL A
+        try std.testing.expect(cpu.registers.a == 0x00);
+        try std.testing.expect(cpu.registers.flags.c == true);
+
+        _ = cpu.step(); // ROL A
+        try std.testing.expect(cpu.registers.a == 0x01);
+        try std.testing.expect(cpu.registers.flags.c == false);
+    }
+}
+
 test "NOP is truly the easiest instruction to implement" {
     // This test exists to celebrate the simplicity of NOP!
     const allocator = std.testing.allocator;
