@@ -98,31 +98,31 @@ pub const instruction_table = blk: {
     table[0xA5] = .{ .mnemonic = .LDA, .addressing_mode = .zero_page, .cycles = 3 };
     table[0xB5] = .{ .mnemonic = .LDA, .addressing_mode = .zero_page_x, .cycles = 4 };
     table[0xAD] = .{ .mnemonic = .LDA, .addressing_mode = .absolute, .cycles = 4 };
-    table[0xBD] = .{ .mnemonic = .LDA, .addressing_mode = .absolute_x, .cycles = 4, .may_page_cross = true }; // +1 if page crossed
-    table[0xB9] = .{ .mnemonic = .LDA, .addressing_mode = .absolute_y, .cycles = 4 }; // +1 if page crossed
+    table[0xBD] = .{ .mnemonic = .LDA, .addressing_mode = .absolute_x, .cycles = 4, .may_page_cross = true };
+    table[0xB9] = .{ .mnemonic = .LDA, .addressing_mode = .absolute_y, .cycles = 4, .may_page_cross = true };
     table[0xA1] = .{ .mnemonic = .LDA, .addressing_mode = .indirect_x, .cycles = 6 };
-    table[0xB1] = .{ .mnemonic = .LDA, .addressing_mode = .indirect_y, .cycles = 5 }; // +1 if page crossed
+    table[0xB1] = .{ .mnemonic = .LDA, .addressing_mode = .indirect_y, .cycles = 5, .may_page_cross = true };
 
     table[0xA2] = .{ .mnemonic = .LDX, .addressing_mode = .immediate, .cycles = 2 };
     table[0xA6] = .{ .mnemonic = .LDX, .addressing_mode = .zero_page, .cycles = 3 };
     table[0xB6] = .{ .mnemonic = .LDX, .addressing_mode = .zero_page_y, .cycles = 4 };
     table[0xAE] = .{ .mnemonic = .LDX, .addressing_mode = .absolute, .cycles = 4 };
-    table[0xBE] = .{ .mnemonic = .LDX, .addressing_mode = .absolute_y, .cycles = 4 }; // +1 if page crossed
+    table[0xBE] = .{ .mnemonic = .LDX, .addressing_mode = .absolute_y, .cycles = 4, .may_page_cross = true };
 
     table[0xA0] = .{ .mnemonic = .LDY, .addressing_mode = .immediate, .cycles = 2 };
     table[0xA4] = .{ .mnemonic = .LDY, .addressing_mode = .zero_page, .cycles = 3 };
     table[0xB4] = .{ .mnemonic = .LDY, .addressing_mode = .zero_page_x, .cycles = 4 };
     table[0xAC] = .{ .mnemonic = .LDY, .addressing_mode = .absolute, .cycles = 4 };
-    table[0xBC] = .{ .mnemonic = .LDY, .addressing_mode = .absolute_x, .cycles = 4 }; // +1 if page crossed
+    table[0xBC] = .{ .mnemonic = .LDY, .addressing_mode = .absolute_x, .cycles = 4, .may_page_cross = true };
 
     table[0xC9] = .{ .mnemonic = .CMP, .addressing_mode = .immediate, .cycles = 2 };
     table[0xC5] = .{ .mnemonic = .CMP, .addressing_mode = .zero_page, .cycles = 3 };
     table[0xD5] = .{ .mnemonic = .CMP, .addressing_mode = .zero_page_x, .cycles = 4 };
     table[0xCD] = .{ .mnemonic = .CMP, .addressing_mode = .absolute, .cycles = 4 };
-    table[0xDD] = .{ .mnemonic = .CMP, .addressing_mode = .absolute_x, .cycles = 4 }; // +1 if page crossed
-    table[0xD9] = .{ .mnemonic = .CMP, .addressing_mode = .absolute_y, .cycles = 4 }; // +1 if page crossed
+    table[0xDD] = .{ .mnemonic = .CMP, .addressing_mode = .absolute_x, .cycles = 4, .may_page_cross = true };
+    table[0xD9] = .{ .mnemonic = .CMP, .addressing_mode = .absolute_y, .cycles = 4, .may_page_cross = true };
     table[0xC1] = .{ .mnemonic = .CMP, .addressing_mode = .indirect_x, .cycles = 6 };
-    table[0xD1] = .{ .mnemonic = .CMP, .addressing_mode = .indirect_y, .cycles = 5 }; // +1 if page crossed
+    table[0xD1] = .{ .mnemonic = .CMP, .addressing_mode = .indirect_y, .cycles = 5, .may_page_cross = true };
 
     table[0x85] = .{ .mnemonic = .STA, .addressing_mode = .zero_page, .cycles = 3 };
     table[0x95] = .{ .mnemonic = .STA, .addressing_mode = .zero_page_x, .cycles = 4 };
@@ -135,7 +135,6 @@ pub const instruction_table = blk: {
     table[0x86] = .{ .mnemonic = .STX, .addressing_mode = .zero_page, .cycles = 3 };
     table[0x96] = .{ .mnemonic = .STX, .addressing_mode = .zero_page_x, .cycles = 4 };
     table[0x8E] = .{ .mnemonic = .STX, .addressing_mode = .absolute, .cycles = 4 };
-    table[0x9E] = .{ .mnemonic = .STX, .addressing_mode = .absolute_x, .cycles = 5 };
 
     table[0x84] = .{ .mnemonic = .STY, .addressing_mode = .zero_page, .cycles = 3 };
     table[0x94] = .{ .mnemonic = .STY, .addressing_mode = .zero_page_x, .cycles = 4 };
