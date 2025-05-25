@@ -77,9 +77,7 @@ pub const CPU = struct {
     }
 
     fn reset(self: *CPU) void {
-        const low = self.readMemory(0xFFFC);
-        const high = self.readMemory(0xFFFD);
-        self.registers.pc = (@as(u16, high) << 8) | low;
+        self.registers.pc = self.bus.cartridge.getResetVector();
     }
 
     inline fn readMemory(self: *CPU, addr: u16) u8 {
