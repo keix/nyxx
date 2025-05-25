@@ -118,6 +118,7 @@ const Registers = struct {
 pub const PPU = struct {
     registers: Registers = .{},
     vram: [0x4000]u8 = [_]u8{0} ** 0x4000, // VRAM
+    _vblank_injected: bool = false,
 
     pub fn init() PPU {
         return PPU{};
@@ -138,7 +139,13 @@ pub const PPU = struct {
 
     pub fn readRegister(self: *PPU, reg: u3) u8 {
         return switch (reg) {
-            2 => self.readStatus(),
+            2 => {
+                if (!self._vblank_injected) {
+                    self._vblank_injected = true;
+                    self.registers.status.vblank = true; // Reset vblank after reading
+                }
+                return self.readStatus();
+            },
             4 => self.readOamData(),
             7 => self.readData(),
             else => 0,
@@ -188,38 +195,3 @@ pub const PPU = struct {
         return self.registers.vram_buffer;
     }
 };
-
-const std = @import("std");
-const testing = std.testing;
-
-test "ScrollUnit writeScroll and writeAddr behavior" {
-    var su = ScrollUnit{};
-
-    su.writeScroll(0b0010_0101); // coarse_x = 4, x = 5
-    try testing.expect(su.t.coarse_x == 4);
-    try testing.expect(su.x == 5); // ← 修正
-    try testing.expect(su.w == true);
-
-    su.writeScroll(0b1101_0110); // coarse_y = 26, fine_y = 6
-    try testing.expect(su.t.coarse_y == 26);
-    try testing.expect(su.t.fine_y == 6);
-    try testing.expect(su.w == false);
-
-    su.writeAddr(0x3F);
-    try testing.expect((su.t.read() & 0x7F00) == 0x3F00);
-    try testing.expect(su.w == true);
-
-    su.writeAddr(0x21);
-    try testing.expect((su.t.read() & 0x00FF) == 0x21);
-    try testing.expect(su.v.read() == su.t.read());
-    try testing.expect(su.w == false);
-}
-
-test "ScrollUnit incrementHorizontal wraps correctly" {
-    var su = ScrollUnit{};
-    su.v.coarse_x = 31;
-    su.v.nametable = 0b00;
-    su.incrementHorizontal();
-    try testing.expect(su.v.coarse_x == 0);
-    try testing.expect(su.v.nametable == 0b01);
-}

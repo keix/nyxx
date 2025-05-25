@@ -1,15 +1,16 @@
 const PPU = @import("ppu.zig").PPU;
+const Cartridge = @import("cartridge.zig").Cartridge;
 
 pub const Bus = struct {
     ram: [2048]u8,
-    rom: []const u8,
+    cartridge: *const Cartridge,
     ppu: PPU,
 
-    pub fn init(rom: []const u8) Bus {
+    pub fn init(cartridge: *const Cartridge) Bus {
         return Bus{
             .ram = [_]u8{0} ** 2048,
-            .rom = rom,
             .ppu = PPU{},
+            .cartridge = cartridge,
         };
     }
 
@@ -26,7 +27,7 @@ pub const Bus = struct {
         return switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF],
             0x2000...0x3FFF => self.ppu.readRegister(@as(u3, @intCast((addr & 0x07)))),
-            0x8000...0xFFFF => self.rom[addr],
+            0x8000...0xFFFF => self.cartridge.read(addr),
             else => 0,
         };
     }
