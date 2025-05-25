@@ -33,12 +33,6 @@ pub fn main() !void {
 
     try stdout.print("Initial PC: 0x{X:0>4}\n", .{cpu.registers.pc});
 
-    const reset_low = bus.read(0xFFFC);
-    const reset_high = bus.read(0xFFFD);
-    const reset_vector = @as(u16, reset_low) | (@as(u16, reset_high) << 8);
-
-    try stdout.print("Read reset vector: 0x{X:0>4}\n", .{reset_vector});
-
     var total_cycles: usize = 0;
     var instruction_count: usize = 0;
 
