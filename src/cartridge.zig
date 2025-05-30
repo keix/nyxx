@@ -41,6 +41,9 @@ pub const Cartridge = struct {
         std.mem.copyForwards(u8, prg_rom, rom_file[prg_start .. prg_start + prg_size]);
         std.mem.copyForwards(u8, chr_rom, rom_file[chr_start .. chr_start + chr_size]);
 
+        std.debug.print("PRG ROM size: {}\n", .{prg_rom.len});
+        std.debug.print("CHR ROM size: {}\n", .{chr_rom.len});
+
         const reset_vector = blk: {
             if (prg_size >= 0x8000) {
                 // 32KB: $FFFC-$FFFD prg_rom[0x7FFC-0x7FFD]
@@ -54,6 +57,14 @@ pub const Cartridge = struct {
                 break :blk @as(u16, low) | (@as(u16, high) << 8);
             }
         };
+
+        const tile_index: usize = 0x24;
+        const start = tile_index * 16;
+        std.debug.print("CHR pattern for tile 0x24 (at offset 0x{X:04}):\n", .{start});
+        var i: usize = 0;
+        while (i < 16) : (i += 1) {
+            std.debug.print("  byte[{}] = 0x{X:02}\n", .{ i, chr_rom[start + i] });
+        }
 
         return Cartridge{
             .prg_rom = prg_rom,

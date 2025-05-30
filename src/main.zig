@@ -2,6 +2,7 @@ const std = @import("std");
 const Bus = @import("bus.zig").Bus;
 const CPU = @import("6502.zig").CPU;
 const Cart = @import("cartridge.zig").Cartridge;
+const FrameBuffer = @import("ppu.zig").FrameBuffer;
 
 pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
@@ -33,28 +34,39 @@ pub fn main() !void {
 
     try stdout.print("Initial PC: 0x{X:0>4}\n", .{cpu.registers.pc});
 
-    var total_cycles: usize = 0;
-    var instruction_count: usize = 0;
+    var fb = FrameBuffer{};
 
     try stdout.print("Starting execution...\n", .{});
 
-    while (instruction_count < 40) {
-        const pc_before = cpu.registers.pc;
-        const opcode = bus.read(cpu.registers.pc);
+    for (0..55) |frame_num| {
+        var frame_cycles: u32 = 0;
+        const target_cycles = 29780; // 1フレーム分のサイクル数
 
-        try stdout.print("Instruction {}: PC=0x{X:0>4}, opcode=0x{X:0>2}", .{ instruction_count, pc_before, opcode });
+        while (frame_cycles < target_cycles) {
+            const cycles = cpu.step();
+            frame_cycles += cycles;
 
-        const cycles = cpu.step();
-        total_cycles += cycles;
-        instruction_count += 1;
+            for (0..(cycles * 3)) |_| {
+                try bus.ppu.step(&fb);
+            }
 
-        try stdout.print(" -> PC=0x{X:0>4}, cycles={}\n", .{ cpu.registers.pc, cycles });
-
-        if (cpu.registers.pc == pc_before) {
-            try stdout.print("Infinite loop detected at PC=0x{X:0>4}\n", .{pc_before});
-            break;
+            // VBlank時にフレーム描画完了
+            if (bus.ppu.registers.status.vblank and !bus.ppu._vblank_injected) {
+                bus.ppu._vblank_injected = true;
+                break;
+            }
         }
-    }
 
-    try stdout.print("Total cycles: {}\n", .{total_cycles});
+        const filename = try std.fmt.allocPrint(allocator, "framebuffer_{d:0>2}.ppm", .{frame_num});
+        defer allocator.free(filename);
+        try fb.writePPM(filename);
+
+        std.debug.print("Frame {}: {} cycles\n", .{ frame_num, frame_cycles });
+
+        var frame_counter: usize = 0;
+        if (frame_counter == 0) {
+            bus.ppu.dumpNameTable();
+        }
+        frame_counter += 1;
+    }
 }

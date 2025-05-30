@@ -165,7 +165,7 @@ pub const CPU = struct {
         self.page_crossed = false;
         self.branch_taken = false;
 
-        std.debug.print("PC: 0x{X:0>4}, opcode: 0x{X:0>2}\n", .{ self.registers.pc, opcode });
+        // std.debug.print("PC: 0x{X:0>4}, opcode: 0x{X:0>2}\n", .{ self.registers.pc, opcode });
 
         return Opcode.instruction_table[opcode];
     }
@@ -334,6 +334,10 @@ pub const CPU = struct {
         const base = self.fetchU16();
         const addr = base +% @as(u16, self.registers.x);
         self.page_crossed = (base & 0xFF00) != (addr & 0xFF00);
+        if (self.page_crossed) {
+            // If page crossed, read the memory to ensure correct behavior
+            _ = self.readMemory((base & 0xFF00) | (addr & 0x00FF));
+        }
         return addr;
     }
 
@@ -353,6 +357,10 @@ pub const CPU = struct {
         const base = self.readU16ZP(self.fetchU8());
         const addr = base +% @as(u16, self.registers.y);
         self.page_crossed = (base & 0xFF00) != (addr & 0xFF00);
+        if (self.page_crossed) {
+            // If page crossed, read the memory to ensure correct behavior
+            _ = self.readMemory((base & 0xFF00) | (addr & 0x00FF));
+        }
         return addr;
     }
 
@@ -645,13 +653,32 @@ pub const CPU = struct {
         self.registers.a = result;
     }
 
-    inline fn opSbc(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
-        const original_value = self.readFrom(addressing_mode);
-        const value = original_value ^ 0xFF;
-        const carry = @as(u8, @intFromBool(self.registers.flags.c));
-        const result = self.registers.a +% value + carry;
+    // inline fn opSbc(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+    //     const original_value = self.readFrom(addressing_mode);
+    //     const value = original_value ^ 0xFF;
+    //     const carry = @as(u8, @intFromBool(self.registers.flags.c));
+    //     const result = self.registers.a +% value + carry;
 
-        self.registers.flags.c = (@as(u16, self.registers.a) + @as(u16, value) + carry) > 0xFF;
+    //     self.registers.flags.c = (@as(u16, self.registers.a) + @as(u16, value) + carry) > 0xFF;
+    //     self.registers.flags.v = ((self.registers.a ^ result) & (original_value ^ result) & 0x80) != 0;
+
+    //     self.registers.a = result;
+    //     self.updateZN(result);
+    // }
+
+    inline fn opSbc(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
+        const original_value: u8 = self.readFrom(addressing_mode);
+        const value: u8 = original_value ^ 0xFF;
+        const carry: u8 = @intFromBool(self.registers.flags.c);
+
+        const sum1 = @addWithOverflow(self.registers.a, value);
+        const sum2 = @addWithOverflow(sum1[0], carry);
+        const result: u8 = sum2[0];
+
+        // Cフラグ: キャリーが発生したか（borrowなし）
+        self.registers.flags.c = @as(u16, self.registers.a) + @as(u16, value) + carry > 0xFF;
+
+        // Vフラグ: 符号オーバーフロー（2の補数の範囲を超えたか）
         self.registers.flags.v = ((self.registers.a ^ result) & (original_value ^ result) & 0x80) != 0;
 
         self.registers.a = result;

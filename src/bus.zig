@@ -1,5 +1,6 @@
 const PPU = @import("ppu.zig").PPU;
 const Cartridge = @import("cartridge.zig").Cartridge;
+const std = @import("std");
 
 pub const Bus = struct {
     ram: [2048]u8,
@@ -7,11 +8,12 @@ pub const Bus = struct {
     ppu: PPU,
 
     pub fn init(cartridge: *const Cartridge) Bus {
-        return Bus{
+        const bus = Bus{
             .ram = [_]u8{0} ** 2048,
-            .ppu = PPU{},
             .cartridge = cartridge,
+            .ppu = PPU.init(cartridge),
         };
+        return bus;
     }
 
     pub fn loadProgram(self: *Bus, program: []const u8, at: u16) void {
@@ -26,7 +28,10 @@ pub const Bus = struct {
     pub fn read(self: *Bus, addr: u16) u8 {
         return switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF],
-            0x2000...0x3FFF => self.ppu.readRegister(@as(u3, @intCast((addr & 0x07)))),
+            0x2000...0x3FFF => {
+                const reg: u3 = @intCast(addr & 0x0007); // 8バイトでラップ
+                return self.ppu.readRegister(reg);
+            },
             0x8000...0xFFFF => self.cartridge.read(addr),
             else => 0,
         };
@@ -35,8 +40,11 @@ pub const Bus = struct {
     pub fn write(self: *Bus, addr: u16, value: u8) void {
         switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF] = value,
-            0x2000...0x3FFF => self.ppu.writeRegister(@as(u3, @intCast(addr & 0x07)), value),
-            0x8000...0xFFFF => @panic("Attempted to write to ROM address"),
+            0x2000...0x3FFF => {
+                const reg: u3 = @intCast(addr & 0x0007); // 同様にラップ
+                self.ppu.writeRegister(reg, value);
+            },
+            0x8000...0xFFFF => {},
             else => {},
         }
     }
