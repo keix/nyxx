@@ -55,7 +55,13 @@ pub const Mnemonic = enum {
     TXA,
     TXS,
     TYA,
-    // Unofficial opcodes can be added later
+    // Unofficial opcodes
+    SLO,
+    SRE,
+    RLA,
+    RRA,
+    DCP,
+    ISB,
     INVALID,
 };
 
@@ -92,6 +98,7 @@ pub const instruction_table = blk: {
 
     var table: [256]Instruction = .{invalid_instruction} ** 256;
 
+    // Fill the instruction table with valid opcodes
     table[0xA9] = .{ .mnemonic = .LDA, .addressing_mode = .immediate, .cycles = 2 };
     table[0xA5] = .{ .mnemonic = .LDA, .addressing_mode = .zero_page, .cycles = 3 };
     table[0xB5] = .{ .mnemonic = .LDA, .addressing_mode = .zero_page_x, .cycles = 4 };
@@ -276,6 +283,55 @@ pub const instruction_table = blk: {
 
     table[0x00] = .{ .mnemonic = .BRK, .addressing_mode = .implied, .cycles = 7 };
     table[0xEA] = .{ .mnemonic = .NOP, .addressing_mode = .implied, .cycles = 2 };
+
+    // Unofficial opcodes
+    table[0x0F] = .{ .mnemonic = .SLO, .addressing_mode = .absolute, .cycles = 6 };
+    table[0x1F] = .{ .mnemonic = .SLO, .addressing_mode = .absolute_x, .cycles = 7 };
+    table[0x1B] = .{ .mnemonic = .SLO, .addressing_mode = .absolute_y, .cycles = 7 };
+    table[0x07] = .{ .mnemonic = .SLO, .addressing_mode = .zero_page, .cycles = 5 };
+    table[0x17] = .{ .mnemonic = .SLO, .addressing_mode = .zero_page_x, .cycles = 6 };
+    table[0x03] = .{ .mnemonic = .SLO, .addressing_mode = .indirect_x, .cycles = 8 };
+    table[0x13] = .{ .mnemonic = .SLO, .addressing_mode = .indirect_y, .cycles = 8 };
+
+    table[0x47] = .{ .mnemonic = .SRE, .addressing_mode = .zero_page, .cycles = 5 };
+    table[0x57] = .{ .mnemonic = .SRE, .addressing_mode = .zero_page_x, .cycles = 6 };
+    table[0x4F] = .{ .mnemonic = .SRE, .addressing_mode = .absolute, .cycles = 6 };
+    table[0x5F] = .{ .mnemonic = .SRE, .addressing_mode = .absolute_x, .cycles = 7 };
+    table[0x5B] = .{ .mnemonic = .SRE, .addressing_mode = .absolute_y, .cycles = 7 };
+    table[0x43] = .{ .mnemonic = .SRE, .addressing_mode = .indirect_x, .cycles = 8 };
+    table[0x53] = .{ .mnemonic = .SRE, .addressing_mode = .indirect_y, .cycles = 8 };
+
+    table[0x27] = .{ .mnemonic = .RLA, .addressing_mode = .zero_page, .cycles = 5 };
+    table[0x37] = .{ .mnemonic = .RLA, .addressing_mode = .zero_page_x, .cycles = 6 };
+    table[0x2F] = .{ .mnemonic = .RLA, .addressing_mode = .absolute, .cycles = 6 };
+    table[0x3F] = .{ .mnemonic = .RLA, .addressing_mode = .absolute_x, .cycles = 7 };
+    table[0x3B] = .{ .mnemonic = .RLA, .addressing_mode = .absolute_y, .cycles = 7 };
+    table[0x23] = .{ .mnemonic = .RLA, .addressing_mode = .indirect_x, .cycles = 8 };
+    table[0x33] = .{ .mnemonic = .RLA, .addressing_mode = .indirect_y, .cycles = 8 };
+
+    table[0x67] = .{ .mnemonic = .RRA, .addressing_mode = .zero_page, .cycles = 5 };
+    table[0x77] = .{ .mnemonic = .RRA, .addressing_mode = .zero_page_x, .cycles = 6 };
+    table[0x6F] = .{ .mnemonic = .RRA, .addressing_mode = .absolute, .cycles = 6 };
+    table[0x7F] = .{ .mnemonic = .RRA, .addressing_mode = .absolute_x, .cycles = 7 };
+    table[0x7B] = .{ .mnemonic = .RRA, .addressing_mode = .absolute_y, .cycles = 7 };
+    table[0x63] = .{ .mnemonic = .RRA, .addressing_mode = .indirect_x, .cycles = 8 };
+    table[0x73] = .{ .mnemonic = .RRA, .addressing_mode = .indirect_y, .cycles = 8 };
+
+    table[0xC7] = .{ .mnemonic = .DCP, .addressing_mode = .zero_page, .cycles = 5 };
+    table[0xD7] = .{ .mnemonic = .DCP, .addressing_mode = .zero_page_x, .cycles = 6 };
+    table[0xCF] = .{ .mnemonic = .DCP, .addressing_mode = .absolute, .cycles = 6 };
+    table[0xDF] = .{ .mnemonic = .DCP, .addressing_mode = .absolute_x, .cycles = 7 };
+    table[0xDB] = .{ .mnemonic = .DCP, .addressing_mode = .absolute_y, .cycles = 7 };
+    table[0xC3] = .{ .mnemonic = .DCP, .addressing_mode = .indirect_x, .cycles = 8 };
+    table[0xD3] = .{ .mnemonic = .DCP, .addressing_mode = .indirect_y, .cycles = 8 };
+
+    table[0xE7] = .{ .mnemonic = .ISB, .addressing_mode = .zero_page, .cycles = 5 };
+    table[0xF7] = .{ .mnemonic = .ISB, .addressing_mode = .zero_page_x, .cycles = 6 };
+    table[0xEF] = .{ .mnemonic = .ISB, .addressing_mode = .absolute, .cycles = 6 };
+    table[0xFF] = .{ .mnemonic = .ISB, .addressing_mode = .absolute_x, .cycles = 7 };
+    table[0xFB] = .{ .mnemonic = .ISB, .addressing_mode = .absolute_y, .cycles = 7 };
+    table[0xE3] = .{ .mnemonic = .ISB, .addressing_mode = .indirect_x, .cycles = 8 };
+    table[0xF3] = .{ .mnemonic = .ISB, .addressing_mode = .indirect_y, .cycles = 8 };
 
     break :blk table;
 };
