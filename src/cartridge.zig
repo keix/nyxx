@@ -3,6 +3,8 @@ const std = @import("std");
 pub const Cartridge = struct {
     prg_rom: []u8,
     chr_rom: []u8,
+    chr_ram: [8192]u8 = [_]u8{0} ** 8192,
+
     mapper: u8,
     reset_vector: u16,
 
@@ -63,7 +65,8 @@ pub const Cartridge = struct {
         std.debug.print("CHR pattern for tile 0x24 (at offset 0x{X:04}):\n", .{start});
         var i: usize = 0;
         while (i < 16) : (i += 1) {
-            std.debug.print("  byte[{}] = 0x{X:02}\n", .{ i, chr_rom[start + i] });
+            if (chr_rom.len > 0)
+                std.debug.print("  byte[{}] = 0x{X:02}\n", .{ i, chr_rom[start + i] });
         }
 
         return Cartridge{
@@ -74,7 +77,7 @@ pub const Cartridge = struct {
         };
     }
 
-    pub fn deinit(self: *Cartridge, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *const Cartridge, allocator: std.mem.Allocator) void {
         allocator.free(self.prg_rom);
         if (self.chr_rom.len > 0)
             allocator.free(self.chr_rom);
@@ -93,5 +96,30 @@ pub const Cartridge = struct {
 
     pub fn getResetVector(self: *const Cartridge) u16 {
         return self.reset_vector;
+    }
+
+    pub fn writeCHR(self: *Cartridge, addr: u16, value: u8) void {
+        if (addr < 0x2000) {
+            // CHR RAM
+            const offset = addr & 0x1FFF; // 8KB CHR RAM
+            if (offset < self.chr_ram.len) {
+                self.chr_ram[offset] = value;
+            } else {
+                std.debug.print("Attempted to write to CHR RAM out of bounds: 0x{X:04}\n", .{addr});
+            }
+        }
+    }
+
+    pub fn readCHR(self: *const Cartridge, addr: u16) u8 {
+        if (addr < 0x2000) {
+            // CHR RAM
+            const offset = addr & 0x1FFF; // 8KB CHR RAM
+            if (offset < self.chr_ram.len) {
+                return self.chr_ram[offset];
+            } else {
+                std.debug.print("Attempted to read from CHR RAM out of bounds: 0x{X:04}\n", .{addr});
+            }
+        }
+        return 0;
     }
 };

@@ -38,9 +38,9 @@ pub fn main() !void {
 
     try stdout.print("Starting execution...\n", .{});
 
-    for (0..55) |frame_num| {
+    for (0..355) |frame_num| {
         var frame_cycles: u32 = 0;
-        const target_cycles = 29780; // 1フレーム分のサイクル数
+        const target_cycles = 29780;
 
         while (frame_cycles < target_cycles) {
             const cycles = cpu.step();
@@ -50,23 +50,22 @@ pub fn main() !void {
                 try bus.ppu.step(&fb);
             }
 
-            // VBlank時にフレーム描画完了
             if (bus.ppu.registers.status.vblank and !bus.ppu._vblank_injected) {
                 bus.ppu._vblank_injected = true;
                 break;
             }
         }
 
-        const filename = try std.fmt.allocPrint(allocator, "framebuffer_{d:0>2}.ppm", .{frame_num});
+        const filename = try std.fmt.allocPrint(allocator, "test-results/framebuffer_{d:0>2}.ppm", .{frame_num});
         defer allocator.free(filename);
         try fb.writePPM(filename);
 
         std.debug.print("Frame {}: {} cycles\n", .{ frame_num, frame_cycles });
 
         var frame_counter: usize = 0;
-        if (frame_counter == 0) {
-            bus.ppu.dumpNameTable();
-        }
+        // if (frame_counter == 0) {
+        //     bus.ppu.dumpNameTable();
+        // }
         frame_counter += 1;
     }
 }

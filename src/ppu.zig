@@ -95,28 +95,6 @@ const LoopyRegister = packed struct {
     }
 };
 
-// const LoopyRegister = struct {
-//     coarse_x: u5 = 0, // Coarse X scroll (0-31)
-//     coarse_y: u5 = 0, // Coarse Y scroll (0-29)
-//     nametable: u2 = 0, // Nametable select (0-3)
-//     fine_y: u3 = 0, // Fine Y scroll (0-7)
-//     unused: u1 = 0, // Unused bit
-
-//     pub fn read(self: LoopyRegister) u16 {
-//         return (@as(u16, self.fine_y) << 12) |
-//             (@as(u16, self.nametable) << 10) |
-//             (@as(u16, self.coarse_y) << 5) |
-//             (@as(u16, self.coarse_x));
-//     }
-
-//     pub fn write(self: *LoopyRegister, value: u16) void {
-//         self.coarse_x = @truncate(value & 0b00000_00000_00011111);
-//         self.coarse_y = @truncate((value >> 5) & 0b00000_00000_00011111);
-//         self.nametable = @truncate((value >> 10) & 0b00000_00000_00000011);
-//         self.fine_y = @truncate((value >> 12) & 0b00000_00000_00000111);
-//     }
-// };
-
 const ScrollUnit = struct {
     v: LoopyRegister = .{}, // current VRAM address
     t: LoopyRegister = .{}, // temporary VRAM address
@@ -144,7 +122,6 @@ const ScrollUnit = struct {
             self.v = self.t;
         }
         self.w = !self.w;
-        std.debug.print("writeAddr: t=0x{X:0>4} v=0x{X:0>4} w={}\n", .{ self.t.read(), self.v.read(), self.w });
     }
 
     pub fn resetLatch(self: *ScrollUnit) void {
@@ -193,11 +170,11 @@ pub const PPU = struct {
     palette_table: [32]u8 = [_]u8{0} ** 32,
     _vblank_injected: bool = false,
 
-    // step 管理用
     cycle: u16 = 0,
     scanline: i16 = 0, // -1 (pre-render) 〜 260 (post-render)
     frame: usize = 0,
-    cartridge: *const Cartridge,
+    cartridge: *Cartridge,
+    open_bus: u8 = 0, // Open bus for PPU read operations
 
     pub fn dumpNameTable(self: *PPU) void {
         const start = 0x2000;
@@ -211,7 +188,7 @@ pub const PPU = struct {
         std.debug.print("\n", .{});
     }
 
-    pub fn init(cartridge: *const Cartridge) PPU {
+    pub fn init(cartridge: *Cartridge) PPU {
         var ppu = PPU{
             .registers = .{},
             .vram = [_]u8{0} ** 0x4000,
@@ -222,11 +199,7 @@ pub const PPU = struct {
             .frame = 0,
             .cartridge = cartridge,
         };
-        //}
 
-        // pub fn setCartridge(self: *PPU, cartridge: *const Cartridge) void {
-        // PPU の初期化時にパレットテーブルを設定
-        //self.cartridge = cartridge;
         ppu.palette_table = [_]u8{
             0x01, 0x23, 0x27, 0x30, // BG Palette 0
             0x0F, 0x2D, 0x3A, 0x12, // BG Palette 1
@@ -238,13 +211,10 @@ pub const PPU = struct {
             0x1F, 0x2D, 0x3B, 0x0D, // Sprite Palette 3
         };
 
-        // 32列 × 30行 = 960バイト
         for (0..30) |row| {
             for (0..32) |col| {
                 const index = row * 32 + col;
-                // ppu.vram[0x2000 + index] = @truncate(index); // 適当なtile_idを並べる
-                ppu.vram[0x2000 + index] = @truncate((row + col) % 64); // タイルIDをパターン化
-
+                ppu.vram[0x2000 + index] = @truncate((row + col) % 64);
             }
         }
 
@@ -252,23 +222,19 @@ pub const PPU = struct {
     }
 
     pub fn step(self: *PPU, fb: *FrameBuffer) !void {
-        // 可視領域内ピクセルレンダリング
         if (self.scanline >= 0 and self.scanline < 240 and self.cycle >= 1 and self.cycle <= 256) {
             try self.renderPixel(fb);
         }
 
-        // VBlank 開始タイミング
         if (self.scanline == 241 and self.cycle == 1) {
             self.registers.status.vblank = true;
         }
 
-        // pre-render line
         if (self.scanline == 261 and self.cycle == 1) {
             self.registers.status.vblank = false;
             self._vblank_injected = false;
         }
 
-        // クロック更新
         self.cycle += 1;
         if (self.cycle > 340) {
             self.cycle = 0;
@@ -285,7 +251,9 @@ pub const PPU = struct {
     }
 
     fn renderPixel(self: *PPU, fb: *FrameBuffer) !void {
-        // const stdout = std.io.getStdOut().writer();
+        if (self.cartridge.chr_rom.len == 0) {
+            return;
+        }
 
         const x = self.cycle - 1;
         const y = self.scanline;
@@ -315,88 +283,56 @@ pub const PPU = struct {
         const x_u8: u8 = @intCast(ux);
         const y_u8: u8 = @intCast(uy);
 
-        // const palette_index = self.palette_table[color_index];
-        // const palette_index = self.palette_table[0 * 4 + color_index]; // 一旦 Palette 0 固定
-
         const attr_table_base: usize = 0x23C0;
         const attr_x = tile_x / 4;
         const attr_y = tile_y / 4;
         const attr_index = attr_y * 8 + attr_x;
         const attr_byte = self.vram[attr_table_base + attr_index];
 
-        // タイル内の 2x2 ブロックの中での位置
-        // const shift = @as(u3, ((tile_y % 4) / 2) * 2 + ((tile_x % 4) / 2)) * 2;
         const offset_y = (tile_y % 4) / 2;
         const offset_x = (tile_x % 4) / 2;
         const shift: u3 = @intCast((offset_y * 2 + offset_x) * 2);
         const palette_number = (attr_byte >> shift) & 0b11;
 
-        // const palette_number = (tile_x / 8 + tile_y / 8) % 4;
         const palette_index = self.palette_table[palette_number * 4 + color_index];
         const color = NES_PALETTE[palette_index];
 
-        if (uy == 0) {
-            // try stdout.print("xy=({},{}) tile_id={} px=({}, {}) idx={} colors=({}, {}) -> ci={} pi={} color=0x{X:0>6}\n", .{ ux, uy, tile_id, pixel_x_in_tile, pixel_y_in_tile, chr_index, plane0, plane1, color_index, palette_index, color });
-        }
-        // try stdout.print("x={} y={} tile_id=0x{X:0>2} plane0=0x{X:0>2} plane1=0x{X:0>2} bit0={} bit1={} color_index={} palette_index={} color=0x{X:0>6}\n", .{ x, y, tile_id, plane0, plane1, bit0, bit1, color_index, palette_index, color });
-        // try stdout.print("tile=({}, {}) palette_number={} color_index={} palette_index={} color=0x{X:0>6}\n", .{ tile_x, tile_y, palette_number, color_index, palette_index, color });
-
         fb.setPixel(x_u8, y_u8, color);
-        // for (0..30) |row| {
-        //     for (0..32) |col| {
-        //         const i = row * 32 + col;
-        //         const tid = self.vram[0x2000 + i];
-        //         try stdout.print("{X:0>2} ", .{tid});
-        //     }
-        //     try stdout.print("\n", .{});
-        // }
     }
 
     pub fn writeRegister(self: *PPU, reg: u3, value: u8) void {
-        // writeRegister の中
-        if (reg == 6) {
-            std.debug.print("writeAddr: value=0x{X:0>2}, w={}\n", .{ value, self.registers.scroll_unit.w });
-            std.debug.print("LoopyRegister v = 0x{X:0>4}\n", .{self.registers.scroll_unit.v.read()});
-        }
-
+        self.open_bus = value;
         switch (reg) {
             0 => self.writeCtrl(value),
             1 => self.writeMask(value),
             2 => {}, // read-only
             3 => self.writeOamAddr(value),
             4 => self.writeOamData(value),
-            // 5 => self.registers.scroll_unit.writeScroll(value),
-            // 6 => self.registers.scroll_unit.writeAddr(value),
-            // 7 => self.writeData(value),
-            5 => {
-                std.debug.print("  Scroll write: value=0x{X:0>2} w={}\n", .{ value, self.registers.scroll_unit.w });
-                self.registers.scroll_unit.writeScroll(value);
-            },
-            6 => {
-                std.debug.print("  Addr write: value=0x{X:0>2} w={} before: t=0x{X:0>4} v=0x{X:0>4}\n", .{ value, self.registers.scroll_unit.w, self.registers.scroll_unit.t.read(), self.registers.scroll_unit.v.read() });
-                self.registers.scroll_unit.writeAddr(value);
-                std.debug.print("  Addr write: after: t=0x{X:0>4} v=0x{X:0>4} w={}\n", .{ self.registers.scroll_unit.t.read(), self.registers.scroll_unit.v.read(), self.registers.scroll_unit.w });
-            },
-            7 => {
-                const addr = self.registers.scroll_unit.v.read() & 0x3FFF;
-                std.debug.print("  Data write: value=0x{X:0>2} to addr=0x{X:0>4}\n", .{ value, addr });
-                self.writeData(value);
-            },
+            5 => self.registers.scroll_unit.writeScroll(value),
+            6 => self.registers.scroll_unit.writeAddr(value),
+            7 => self.writeData(value),
         }
     }
 
     pub fn readRegister(self: *PPU, reg: u3) u8 {
         return switch (reg) {
             2 => {
-                if (!self._vblank_injected) {
-                    self._vblank_injected = true;
-                    self.registers.status.vblank = true; // Reset vblank after reading
-                }
-                return self.readStatus();
+                const val = self.registers.status.read();
+                self.open_bus = val;
+                self.registers.scroll_unit.resetLatch();
+                return val;
             },
-            4 => self.readOamData(),
-            7 => self.readData(),
-            else => 0,
+            4 => {
+                const val = self.readOamData();
+                self.open_bus = val;
+                return val;
+            },
+            7 => {
+                const val = self.readData();
+                self.open_bus = val;
+                return val;
+            },
+            else => self.open_bus, // Open bus for other registers
         };
     }
 
@@ -421,91 +357,36 @@ pub const PPU = struct {
         self.registers.scroll.write(value);
     }
 
-    // fn writeData(self: *PPU, value: u8) void {
-    //     const addr = self.registers.scroll_unit.v.read() & 0x3FFF;
-    //     if (addr >= 0x2000 and addr <= 0x2FFF) {
-    //         self.vram[addr] = value;
-    //     } else {
-    //         std.debug.print("💥 Warning: write to invalid PPU addr = 0x{X:0>4}\n", .{addr});
-    //     }
-
-    //     if ((self.registers.ctrl >> 2) & 0b1 == 1) {
-    //         self.registers.scroll_unit.incrementVertical();
-    //     } else {
-    //         self.registers.scroll_unit.incrementHorizontal();
-    //     }
-    // }
-
-    // fn writeData(self: *PPU, value: u8) void {
-    //     var addr = self.registers.scroll_unit.v.read() & 0x3FFF;
-
-    //     // ミラー処理: 0x3000–0x3EFF → 0x2000–0x2EFF に変換
-    //     if (addr >= 0x3000 and addr < 0x3F00) {
-    //         addr -= 0x1000;
-    //     }
-
-    //     if (addr >= 0x2000 and addr < 0x3000) {
-    //         self.vram[addr] = value;
-    //     } else {
-    //         std.debug.print("💥 Warning: write to invalid PPU addr = 0x{X:0>4}\n", .{addr});
-    //     }
-
-    //     if ((self.registers.ctrl >> 2) & 0b1 == 1) {
-    //         self.registers.scroll_unit.incrementVertical();
-    //     } else {
-    //         self.registers.scroll_unit.incrementHorizontal();
-    //     }
-    // }
-
     fn writeData(self: *PPU, value: u8) void {
         const addr = self.registers.scroll_unit.v.read() & 0x3FFF;
+        if (addr < 0x2000) {
+            self.cartridge.writeCHR(addr, value);
+            return; // CHR ROM/RAM write
+        }
 
-        std.debug.print("  writeData: raw_addr=0x{X:0>4} ", .{addr});
-
-        // NES PPU メモリマップ処理
         if (addr >= 0x2000 and addr < 0x3000) {
-            // Name tables: 0x2000-0x2FFF
-            // 各Name Tableは0x400バイト（1KB）
-            // ミラーリングを考慮してアドレスを正規化
-
-            // 0x2000-0x23FF: Name Table 0
-            // 0x2400-0x27FF: Name Table 1
-            // 0x2800-0x2BFF: Name Table 2
-            // 0x2C00-0x2FFF: Name Table 3
-
-            // カートリッジのミラーリングタイプに応じて処理
-            // 今回は垂直ミラーリング（Name Table 0,1 が同じメモリを共有）を仮定
             var mirrored_addr = addr;
 
             if (addr >= 0x2800) {
-                // Name Table 2,3 -> Name Table 0,1 にミラー
                 mirrored_addr = addr - 0x800;
             }
 
-            std.debug.print("mirrored_addr=0x{X:0>4} ", .{mirrored_addr});
-
             if (mirrored_addr >= 0x2000 and mirrored_addr < 0x2800) {
                 self.vram[mirrored_addr] = value;
-                std.debug.print("✓ written to VRAM[0x{X:0>4}]=0x{X:0>2}", .{ mirrored_addr, value });
             } else {
-                std.debug.print("✗ invalid mirrored address", .{});
+                std.debug.print("Invalid mirrored address", .{});
             }
         } else if (addr >= 0x3000 and addr < 0x3F00) {
-            // 0x3000-0x3EFF は 0x2000-0x2EFF のミラー
             var mirrored_addr = addr - 0x1000;
 
-            // 再帰的にミラーリング処理
             if (mirrored_addr >= 0x2800) {
                 mirrored_addr = mirrored_addr - 0x800;
             }
 
-            std.debug.print("mirror_to_2xxx: mirrored_addr=0x{X:0>4} ", .{mirrored_addr});
-
             if (mirrored_addr >= 0x2000 and mirrored_addr < 0x2800) {
                 self.vram[mirrored_addr] = value;
-                std.debug.print("✓ written to VRAM[0x{X:0>4}]=0x{X:0>2}", .{ mirrored_addr, value });
             } else {
-                std.debug.print("✗ invalid mirrored address", .{});
+                std.debug.print("Invalid mirrored address", .{});
             }
         } else if (addr >= 0x3F00 and addr < 0x4000) {
             // パレットメモリ: 0x3F00-0x3FFF
@@ -518,28 +399,28 @@ pub const PPU = struct {
             if (palette_addr == 0x1C) palette_addr = 0x0C;
 
             self.palette_table[palette_addr] = value;
-            std.debug.print("✓ written to palette[0x{X:0>2}]=0x{X:0>2}", .{ palette_addr, value });
         } else {
-            std.debug.print("✗ invalid PPU address", .{});
+            std.debug.print("Invalid PPU address", .{});
         }
 
-        std.debug.print("\n", .{});
-
-        // アドレスインクリメント（PPUCTRL bit 2 で方向決定）
         if ((self.registers.ctrl >> 2) & 0b1 == 1) {
-            // 垂直インクリメント（+32）
             const new_addr = (self.registers.scroll_unit.v.read() + 32) & 0x7FFF;
             self.registers.scroll_unit.v.write(new_addr);
         } else {
-            // 水平インクリメント（+1）
             const new_addr = (self.registers.scroll_unit.v.read() + 1) & 0x7FFF;
             self.registers.scroll_unit.v.write(new_addr);
         }
     }
 
     fn readStatus(self: *PPU) u8 {
-        const value = self.registers.status.read();
+        var value: u8 = 0;
+        value |= @as(u8, @intFromBool(self.registers.status.vblank)) << 7;
+        value |= @as(u8, @intFromBool(self.registers.status.sprite0_hit)) << 6;
+        value |= @as(u8, @intFromBool(self.registers.status.sprite_overflow)) << 5;
+        value |= self.open_bus & 0b0001_1111;
+        self.open_bus = value;
         self.registers.scroll_unit.resetLatch();
+        self.registers.status.vblank = false;
         return value;
     }
 
@@ -550,6 +431,12 @@ pub const PPU = struct {
     fn readData(self: *PPU) u8 {
         const addr = self.registers.scroll_unit.v.read() & 0x3FFF;
         var result: u8 = 0;
+
+        if (addr < 0x2000) {
+            result = self.cartridge.readCHR(addr);
+            self.registers.vram_buffer = result; // Update buffer with CHR read
+            return result; // CHR ROM/RAM read
+        }
 
         if (addr < 0x3F00) {
             result = self.registers.vram_buffer;
@@ -564,9 +451,6 @@ pub const PPU = struct {
             };
             result = self.palette_table[palette_index];
 
-            // Open bus behavior: buffer is NOT updated with palette reads
-            // Instead, buffer should hold a mirrored nametable read
-            // Let's pretend we're loading from $2xxx to preserve correct state
             const mirrored = addr - 0x1000;
             self.registers.vram_buffer = self.vram[mirrored];
         }

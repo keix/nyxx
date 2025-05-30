@@ -4,10 +4,10 @@ const std = @import("std");
 
 pub const Bus = struct {
     ram: [2048]u8,
-    cartridge: *const Cartridge,
+    cartridge: *Cartridge,
     ppu: PPU,
 
-    pub fn init(cartridge: *const Cartridge) Bus {
+    pub fn init(cartridge: *Cartridge) Bus {
         const bus = Bus{
             .ram = [_]u8{0} ** 2048,
             .cartridge = cartridge,
@@ -29,7 +29,7 @@ pub const Bus = struct {
         return switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF],
             0x2000...0x3FFF => {
-                const reg: u3 = @intCast(addr & 0x0007); // 8バイトでラップ
+                const reg: u3 = @intCast(addr & 0x0007);
                 return self.ppu.readRegister(reg);
             },
             0x8000...0xFFFF => self.cartridge.read(addr),
@@ -41,7 +41,7 @@ pub const Bus = struct {
         switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF] = value,
             0x2000...0x3FFF => {
-                const reg: u3 = @intCast(addr & 0x0007); // 同様にラップ
+                const reg: u3 = @intCast(addr & 0x0007);
                 self.ppu.writeRegister(reg, value);
             },
             0x8000...0xFFFF => {},

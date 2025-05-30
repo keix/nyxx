@@ -152,31 +152,36 @@ pub const CPU = struct {
             .ROL => self.opRol(instr.addressing_mode),
             .ROR => self.opRor(instr.addressing_mode),
             .BRK => self.opBrk(),
-            // Add more opcodes as needed
+
+            // Unofficial opcodes
+            .SLO => self.opSlo(instr.addressing_mode),
+            .SRE => self.opSre(instr.addressing_mode),
+            .RLA => self.opRla(instr.addressing_mode),
+            .RRA => self.opRra(instr.addressing_mode),
+            .DCP => self.opDcp(instr.addressing_mode),
+            .ISB => self.opIsb(instr.addressing_mode),
             else => {
                 std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
             },
         }
     }
 
-    inline fn fetch(self: *CPU) Opcode.Instruction {
+    fn fetch(self: *CPU) Opcode.Instruction {
         const opcode = self.fetchU8();
 
         self.page_crossed = false;
         self.branch_taken = false;
 
-        // std.debug.print("PC: 0x{X:0>4}, opcode: 0x{X:0>2}\n", .{ self.registers.pc, opcode });
-
         return Opcode.instruction_table[opcode];
     }
 
-    inline fn fetchU8(self: *CPU) u8 {
+    fn fetchU8(self: *CPU) u8 {
         const value = self.readMemory(self.registers.pc);
         self.registers.pc +%= 1;
         return value;
     }
 
-    inline fn fetchU16(self: *CPU) u16 {
+    fn fetchU16(self: *CPU) u16 {
         const low = self.fetchU8();
         const high = self.fetchU8();
         return (@as(u16, high) << 8) | @as(u16, low);
@@ -260,9 +265,10 @@ pub const CPU = struct {
                 const addr = self.getAddress(addressing_mode);
                 const value = self.readMemory(addr);
 
+                self.writeMemory(addr, value); // Dummy write to avoid unused variable warning
                 const result = self.shiftValue(value, operation);
 
-                self.writeMemory(addr, result.value);
+                self.writeMemory(addr, result.value); // Really write the shifted value
                 self.registers.flags.c = result.carry;
                 self.updateZN(result.value);
             },
@@ -296,13 +302,46 @@ pub const CPU = struct {
         return result;
     }
 
-    inline fn getAddress(self: *CPU, mode: Opcode.AddressingMode) u16 {
+    // inline fn getAddress(self: *CPU, mode: Opcode.AddressingMode) u16 {
+    fn getAddress(self: *CPU, mode: Opcode.AddressingMode) u16 {
         return switch (mode) {
             .zero_page => self.getZeroPage(),
             .zero_page_x => self.getZeroPageX(),
             .absolute => self.getAbsolute(),
             .absolute_x => self.getAbsoluteX(),
+            .absolute_y => self.getAbsoluteY(),
+            .indirect_x => self.getIndirectX(),
+            .indirect_y => self.getIndirectY(),
             else => unreachable,
+        };
+    }
+
+    fn getAddressForRMW(self: *CPU, mode: Opcode.AddressingMode) u16 {
+        return switch (mode) {
+            .zero_page, .zero_page_x, .absolute => self.getAddress(mode),
+            .absolute_x => blk: {
+                const base = self.fetchU16();
+                const addr = base +% @as(u16, self.registers.x);
+                self.page_crossed = (base & 0xFF00) != (addr & 0xFF00);
+                break :blk addr;
+            },
+            .absolute_y => blk: {
+                const base = self.fetchU16();
+                const addr = base +% @as(u16, self.registers.y);
+                self.page_crossed = (base & 0xFF00) != (addr & 0xFF00);
+                break :blk addr;
+            },
+            .indirect_x => self.getIndirectX(),
+            .indirect_y => blk: {
+                const base = self.readU16ZP(self.fetchU8());
+                const addr = base +% @as(u16, self.registers.y);
+                self.page_crossed = (base & 0xFF00) != (addr & 0xFF00);
+                break :blk addr;
+            },
+            else => {
+                std.debug.print("PANIC: Unexpected AddressingMode for RMW: {}\n", .{mode});
+                @panic("getAddressForRMW: unexpected AddressingMode");
+            },
         };
     }
 
@@ -319,7 +358,9 @@ pub const CPU = struct {
     }
 
     inline fn getZeroPageX(self: *CPU) u16 {
-        return @as(u16, (self.fetchU8() + self.registers.x) & 0xFF);
+        // return @as(u16, (self.fetchU8() + self.registers.x) & 0xFF);
+        const offset: u16 = @as(u16, self.fetchU8()) + @as(u16, self.registers.x);
+        return offset & 0xFF;
     }
 
     inline fn getZeroPageY(self: *CPU) u16 {
@@ -553,17 +594,23 @@ pub const CPU = struct {
 
     inline fn opInc(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
         const addr = self.getAddress(addressing_mode);
-        const value = self.readMemory(addr) +% 1;
+        const original = self.readMemory(addr);
 
+        self.writeMemory(addr, original);
+        const value = original +% 1;
         self.writeMemory(addr, value);
+
         self.updateZN(value);
     }
 
     inline fn opDec(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
         const addr = self.getAddress(addressing_mode);
-        const value = self.readMemory(addr) -% 1;
+        const original = self.readMemory(addr);
 
+        self.writeMemory(addr, original);
+        const value = original -% 1;
         self.writeMemory(addr, value);
+
         self.updateZN(value);
     }
 
@@ -622,6 +669,7 @@ pub const CPU = struct {
     }
 
     inline fn opRts(self: *CPU) void {
+        _ = self.bus.read(self.registers.pc);
         const low = self.pop();
         const high = self.pop();
         const addr = (@as(u16, high) << 8) | @as(u16, low);
@@ -629,6 +677,7 @@ pub const CPU = struct {
     }
 
     inline fn opRti(self: *CPU) void {
+        _ = self.bus.read(self.registers.pc);
         const flags = self.pop();
         self.registers.flags = Flags.fromByte(flags);
 
@@ -653,19 +702,6 @@ pub const CPU = struct {
         self.registers.a = result;
     }
 
-    // inline fn opSbc(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
-    //     const original_value = self.readFrom(addressing_mode);
-    //     const value = original_value ^ 0xFF;
-    //     const carry = @as(u8, @intFromBool(self.registers.flags.c));
-    //     const result = self.registers.a +% value + carry;
-
-    //     self.registers.flags.c = (@as(u16, self.registers.a) + @as(u16, value) + carry) > 0xFF;
-    //     self.registers.flags.v = ((self.registers.a ^ result) & (original_value ^ result) & 0x80) != 0;
-
-    //     self.registers.a = result;
-    //     self.updateZN(result);
-    // }
-
     inline fn opSbc(self: *CPU, addressing_mode: Opcode.AddressingMode) void {
         const original_value: u8 = self.readFrom(addressing_mode);
         const value: u8 = original_value ^ 0xFF;
@@ -675,10 +711,7 @@ pub const CPU = struct {
         const sum2 = @addWithOverflow(sum1[0], carry);
         const result: u8 = sum2[0];
 
-        // Cフラグ: キャリーが発生したか（borrowなし）
         self.registers.flags.c = @as(u16, self.registers.a) + @as(u16, value) + carry > 0xFF;
-
-        // Vフラグ: 符号オーバーフロー（2の補数の範囲を超えたか）
         self.registers.flags.v = ((self.registers.a ^ result) & (original_value ^ result) & 0x80) != 0;
 
         self.registers.a = result;
@@ -747,6 +780,7 @@ pub const CPU = struct {
     }
 
     inline fn opBrk(self: *CPU) void {
+        _ = self.bus.read(self.registers.pc);
         const return_addr = self.registers.pc + 1;
         self.push(@as(u8, @truncate(return_addr >> 8)));
         self.push(@as(u8, @truncate(return_addr & 0xFF)));
@@ -759,5 +793,122 @@ pub const CPU = struct {
         const low = self.readMemory(0xFFFE);
         const high = self.readMemory(0xFFFF);
         self.registers.pc = (@as(u16, high) << 8) | low;
+    }
+
+    // Unofficial opcodes
+    fn opSlo(self: *CPU, mode: Opcode.AddressingMode) void {
+        const addr = self.getAddressForRMW(mode);
+        const value = self.readMemory(addr);
+
+        // Perform ASL
+        const shifted = value << 1;
+        self.registers.flags.c = (value & 0x80) != 0;
+
+        // Write back (dummy + real write)
+        self.writeMemory(addr, value); // dummy write
+        self.writeMemory(addr, shifted); // real write
+
+        // Perform ORA with A
+        self.registers.a |= shifted;
+        self.updateZN(self.registers.a);
+    }
+
+    fn opSre(self: *CPU, mode: Opcode.AddressingMode) void {
+        const addr = self.getAddressForRMW(mode);
+        const value = self.readMemory(addr);
+
+        // Perform LSR
+        const shifted = value >> 1;
+        self.registers.flags.c = (value & 0x01) != 0;
+
+        // Write back (dummy + real write)
+        self.writeMemory(addr, value);
+        self.writeMemory(addr, shifted);
+
+        // Perform EOR with A
+        self.registers.a ^= shifted;
+        self.updateZN(self.registers.a);
+    }
+
+    fn opRla(self: *CPU, mode: Opcode.AddressingMode) void {
+        const addr = self.getAddressForRMW(mode);
+        const value = self.readMemory(addr);
+
+        // Perform ROL
+        const carry_in: u8 = @intFromBool(self.registers.flags.c);
+        const result = (value << 1) | carry_in;
+        self.registers.flags.c = (value & 0x80) != 0;
+
+        // Write back (dummy + real write)
+        self.writeMemory(addr, value);
+        self.writeMemory(addr, result);
+
+        // Perform AND with A
+        self.registers.a &= result;
+        self.updateZN(self.registers.a);
+    }
+
+    fn opRra(self: *CPU, mode: Opcode.AddressingMode) void {
+        const addr = self.getAddressForRMW(mode);
+        const value = self.readMemory(addr);
+
+        // ROR (rotate right through carry)
+        const carry_in: u8 = @as(u8, @intFromBool(self.registers.flags.c)) << 7;
+        const result = (value >> 1) | carry_in;
+        self.registers.flags.c = (value & 0x01) != 0;
+
+        // Write back (dummy + real write)
+        self.writeMemory(addr, value);
+        self.writeMemory(addr, result);
+
+        // ADC (A + result + C)
+        const a = self.registers.a;
+        const c = @intFromBool(self.registers.flags.c);
+        const sum_u16: u16 = @as(u16, a) + @as(u16, result) + @as(u16, c);
+        const sum_u8: u8 = @truncate(sum_u16);
+
+        self.registers.flags.c = sum_u16 > 0xFF;
+        self.registers.flags.v = (@as(u8, ~(a ^ result)) & @as(u8, (a ^ sum_u8)) & 0x80) != 0;
+        self.registers.a = sum_u8;
+        self.updateZN(sum_u8);
+    }
+
+    fn opDcp(self: *CPU, mode: Opcode.AddressingMode) void {
+        const addr = self.getAddressForRMW(mode);
+        const original = self.readMemory(addr);
+        const decremented = original -% 1;
+
+        // Write back (dummy + real write)
+        self.writeMemory(addr, original);
+        self.writeMemory(addr, decremented);
+
+        // CMP (A - decremented)
+        const a = self.registers.a;
+        const tmp = a -% decremented;
+
+        self.registers.flags.c = a >= decremented;
+        self.registers.flags.z = tmp == 0;
+        self.registers.flags.n = (tmp & 0x80) != 0;
+    }
+
+    fn opIsb(self: *CPU, mode: Opcode.AddressingMode) void {
+        const addr = self.getAddressForRMW(mode);
+        const value = self.readMemory(addr);
+        const incremented: u8 = value +% 1;
+
+        // Write back (dummy + real write)
+        self.writeMemory(addr, value);
+        self.writeMemory(addr, incremented);
+
+        const a = self.registers.a;
+        const c = @intFromBool(self.registers.flags.c);
+        const operand: u8 = ~incremented;
+        const result16: u16 = @as(u16, a) + @as(u16, operand) + @as(u16, c);
+        const result: u8 = @truncate(result16);
+
+        self.registers.flags.c = (result16 & 0x100) != 0;
+        self.registers.flags.v = ((a ^ operand) & (a ^ result) & 0x80) != 0;
+        self.registers.a = result;
+        self.updateZN(result);
     }
 };
