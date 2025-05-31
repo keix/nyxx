@@ -99,6 +99,10 @@ pub const Cartridge = struct {
     }
 
     pub fn writeCHR(self: *Cartridge, addr: u16, value: u8) void {
+        if (self.chr_rom.len > 0) {
+            // CHR ROM is read-only
+            return;
+        }
         if (addr < 0x2000) {
             // CHR RAM
             const offset = addr & 0x1FFF; // 8KB CHR RAM

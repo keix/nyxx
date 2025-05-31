@@ -175,6 +175,8 @@ pub const PPU = struct {
     frame: usize = 0,
     cartridge: *Cartridge,
     open_bus: u8 = 0, // Open bus for PPU read operations
+    dma_active: bool = false,
+    oam_accessing: bool = false,
 
     pub fn dumpNameTable(self: *PPU) void {
         const start = 0x2000;
@@ -233,6 +235,7 @@ pub const PPU = struct {
         if (self.scanline == 261 and self.cycle == 1) {
             self.registers.status.vblank = false;
             self._vblank_injected = false;
+            self.registers.status.sprite0_hit = false; // Reset sprite 0 hit flag
         }
 
         self.cycle += 1;
@@ -280,6 +283,34 @@ pub const PPU = struct {
 
         const color_index = (bit1 << 1) | bit0;
 
+        if (!self.registers.status.sprite0_hit and
+            self.scanline < 240 and self.cycle <= 256 and color_index != 0)
+        {
+            const sprite_y = self.registers.oam_data[0];
+            const sprite_tile = self.registers.oam_data[1];
+            const sprite_x = self.registers.oam_data[3];
+
+            if (self.scanline >= sprite_y and self.scanline < sprite_y + 8 and
+                (self.cycle - 1) >= sprite_x and (self.cycle - 1) < sprite_x + 8)
+            {
+                const sprite_pixel_y: u3 = @intCast(self.scanline - sprite_y);
+                const sprite_chr_index: usize = @as(usize, sprite_tile) * 16;
+                const sprite_plane0 = self.cartridge.chr_rom[sprite_chr_index + sprite_pixel_y];
+                const sprite_plane1 = self.cartridge.chr_rom[sprite_chr_index + 8 + sprite_pixel_y];
+                const sprite_bit_x: u3 = @intCast((self.cycle - 1) - sprite_x);
+                const sprite_bit_index: u3 = 7 - sprite_bit_x;
+
+                const sbit0 = (sprite_plane0 >> sprite_bit_index) & 1;
+                const sbit1 = (sprite_plane1 >> sprite_bit_index) & 1;
+                const sprite_color_index = (sbit1 << 1) | sbit0;
+
+                if (sprite_color_index != 0) {
+                    self.registers.status.sprite0_hit = true;
+                    std.debug.print("Sprite 0 hit at scanline={d}, cycle={d}\n", .{ self.scanline, self.cycle });
+                }
+            }
+        }
+
         const x_u8: u8 = @intCast(ux);
         const y_u8: u8 = @intCast(uy);
 
@@ -306,8 +337,18 @@ pub const PPU = struct {
             0 => self.writeCtrl(value),
             1 => self.writeMask(value),
             2 => {}, // read-only
-            3 => self.writeOamAddr(value),
-            4 => self.writeOamData(value),
+            // 3 => self.writeOamAddr(value),
+            // 4 => self.writeOamData(value),
+            3 => {
+                self.oam_accessing = true;
+                self.writeOamAddr(value);
+                self.oam_accessing = false;
+            },
+            4 => {
+                self.oam_accessing = true;
+                self.writeOamData(value);
+                self.oam_accessing = false;
+            },
             5 => self.registers.scroll_unit.writeScroll(value),
             6 => self.registers.scroll_unit.writeAddr(value),
             7 => self.writeData(value),
@@ -348,7 +389,7 @@ pub const PPU = struct {
         self.registers.oam_addr = value;
     }
 
-    fn writeOamData(self: *PPU, value: u8) void {
+    pub fn writeOamData(self: *PPU, value: u8) void {
         self.registers.oam_data[self.registers.oam_addr] = value;
         self.registers.oam_addr +%= 1;
     }
