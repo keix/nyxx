@@ -36,6 +36,69 @@ pub const FrameBuffer = struct {
     }
 };
 
+pub const VRAM = struct {
+    memory: [0x4000]u8 = [_]u8{0} ** 0x4000,
+    palette: [32]u8 = [_]u8{0} ** 32,
+    buffer: u8 = 0, // Buffer for PPU data reads
+
+    pub fn init() VRAM {
+        var vram = VRAM{
+            .memory = [_]u8{0} ** 0x4000,
+            .palette = [_]u8{0} ** 32,
+        };
+
+        vram.palette = [_]u8{
+            0x01, 0x23, 0x27, 0x30, // BG Palette 0
+            0x0F, 0x2D, 0x3A, 0x12, // BG Palette 1
+            0x1C, 0x2B, 0x3C, 0x0A, // BG Palette 2
+            0x1E, 0x2E, 0x3E, 0x0C, // BG Palette 3
+            0x0F, 0x3D, 0x2C, 0x1A, // Sprite Palette 0
+            0x1D, 0x2F, 0x3F, 0x0B, // Sprite Palette 1
+            0x0E, 0x3E, 0x2A, 0x09, // Sprite Palette 2
+            0x1F, 0x2D, 0x3B, 0x0D, // Sprite Palette 3
+        };
+
+        for (0..30) |row| {
+            for (0..32) |col| {
+                const index = row * 32 + col;
+                vram.memory[index] = @truncate((row + col) % 64);
+            }
+        }
+
+        return vram;
+    }
+
+    pub fn read(self: *VRAM, addr: u16) u8 {
+        // const masked = addr;
+        // if (masked >= 0x3F00) {
+        //     var palette_addr = masked & 0x1F;
+        //     if (palette_addr == 0x10) palette_addr = 0x00;
+        //     if (palette_addr == 0x14) palette_addr = 0x04;
+        //     if (palette_addr == 0x18) palette_addr = 0x08;
+        //     if (palette_addr == 0x1C) palette_addr = 0x0C;
+        //     return self.palette[palette_addr];
+        // } else {
+        //     return self.memory[masked];
+        // }
+        return self.memory[addr];
+    }
+
+    pub fn write(self: *VRAM, addr: u16, value: u8) void {
+        // const masked = addr;
+        // if (masked >= 0x3F00) {
+        //     var palette_addr = masked & 0x1F;
+        //     if (palette_addr == 0x10) palette_addr = 0x00;
+        //     if (palette_addr == 0x14) palette_addr = 0x04;
+        //     if (palette_addr == 0x18) palette_addr = 0x08;
+        //     if (palette_addr == 0x1C) palette_addr = 0x0C;
+        //     self.palette[palette_addr] = value;
+        // } else {
+        //     self.memory[masked] = value;
+        // }
+        self.memory[addr] = value;
+    }
+};
+
 const NES_PALETTE = [_]u32{
     0x666666, 0x002A88, 0x1412A7, 0x3B00A4, 0x5C007E, 0x6E0040, 0x6C0600, 0x561D00,
     0x333500, 0x0B4800, 0x005200, 0x004F08, 0x00404D, 0x000000, 0x000000, 0x000000,
@@ -161,13 +224,14 @@ const Registers = struct {
     oam_addr: u8 = 0, // $2003
     oam_data: [256]u8 = [_]u8{0} ** 256, // $2004
     scroll_unit: ScrollUnit = .{}, // $2005 + $2006 + fine X scroll
-    vram_buffer: u8 = 0, // $2007
+    // vram_buffer: u8 = 0, // $2007
 };
 
 pub const PPU = struct {
-    registers: Registers = .{},
-    vram: [0x4000]u8 = [_]u8{0} ** 0x4000, // VRAM
-    palette_table: [32]u8 = [_]u8{0} ** 32,
+    registers: Registers,
+    // vram: [0x4000]u8 = [_]u8{0} ** 0x4000, // VRAM
+    // palette_table: [32]u8 = [_]u8{0} ** 32,
+    vram: VRAM,
     _vblank_injected: bool = false,
 
     cycle: u16 = 0,
@@ -191,36 +255,16 @@ pub const PPU = struct {
     }
 
     pub fn init(cartridge: *Cartridge) PPU {
-        var ppu = PPU{
+        return PPU{
             .registers = .{},
-            .vram = [_]u8{0} ** 0x4000,
-            .palette_table = [_]u8{0} ** 32,
+            .vram = VRAM.init(),
+            // .palette_table = [_]u8{0} ** 32,
             ._vblank_injected = false,
             .cycle = 0,
             .scanline = -1, // pre-render line
             .frame = 0,
             .cartridge = cartridge,
         };
-
-        ppu.palette_table = [_]u8{
-            0x01, 0x23, 0x27, 0x30, // BG Palette 0
-            0x0F, 0x2D, 0x3A, 0x12, // BG Palette 1
-            0x1C, 0x2B, 0x3C, 0x0A, // BG Palette 2
-            0x1E, 0x2E, 0x3E, 0x0C, // BG Palette 3
-            0x0F, 0x3D, 0x2C, 0x1A, // Sprite Palette 0
-            0x1D, 0x2F, 0x3F, 0x0B, // Sprite Palette 1
-            0x0E, 0x3E, 0x2A, 0x09, // Sprite Palette 2
-            0x1F, 0x2D, 0x3B, 0x0D, // Sprite Palette 3
-        };
-
-        for (0..30) |row| {
-            for (0..32) |col| {
-                const index = row * 32 + col;
-                ppu.vram[0x2000 + index] = @truncate((row + col) % 64);
-            }
-        }
-
-        return ppu;
     }
 
     pub fn step(self: *PPU, fb: *FrameBuffer) !void {
@@ -254,50 +298,43 @@ pub const PPU = struct {
     }
 
     fn renderPixel(self: *PPU, fb: *FrameBuffer) !void {
-        if (self.cartridge.chr_rom.len == 0) {
-            return;
-        }
+        if (self.cartridge.chr_rom.len == 0) return;
 
-        const x = self.cycle - 1;
-        const y = self.scanline;
+        const x: u16 = @intCast(self.cycle - 1);
+        const y: u16 = @intCast(self.scanline);
 
-        const ux: u16 = @intCast(x);
-        const uy: u16 = @intCast(y);
-
-        const tile_x = ux / 8;
-        const tile_y = uy / 8;
+        const tile_x = x / 8;
+        const tile_y = y / 8;
         const name_table_index = tile_y * 32 + tile_x;
+        const tile_id = self.vram.read(0x2000 + @as(u16, name_table_index));
 
-        const tile_id = self.vram[0x2000 + name_table_index];
+        // ピクセル座標（タイル内）
+        const pixel_x: u3 = @intCast(x % 8);
+        const pixel_y: u3 = @intCast(y % 8);
 
-        const pixel_x_in_tile: u3 = @intCast(ux % 8);
-        const pixel_y_in_tile: u3 = @intCast(uy % 8);
+        const chr_index = @as(usize, tile_id) * 16;
+        const plane0 = self.cartridge.chr_rom[chr_index + pixel_y];
+        const plane1 = self.cartridge.chr_rom[chr_index + 8 + pixel_y];
 
-        const chr_index: usize = @as(usize, tile_id) * 16;
-        const plane0 = self.cartridge.chr_rom[chr_index + pixel_y_in_tile];
-        const plane1 = self.cartridge.chr_rom[chr_index + 8 + pixel_y_in_tile];
-
-        const bit_index: u3 = 7 - pixel_x_in_tile;
+        const bit_index: u3 = 7 - pixel_x;
         const bit0 = (plane0 >> bit_index) & 1;
         const bit1 = (plane1 >> bit_index) & 1;
-
         const color_index = (bit1 << 1) | bit0;
 
+        // Sprite 0 Hit 処理（現状のまま）
         if (!self.registers.status.sprite0_hit and
-            self.scanline < 240 and self.cycle <= 256 and color_index != 0)
+            y < 240 and x < 256 and color_index != 0)
         {
             const sprite_y = self.registers.oam_data[0];
             const sprite_tile = self.registers.oam_data[1];
             const sprite_x = self.registers.oam_data[3];
 
-            if (self.scanline >= sprite_y and self.scanline < sprite_y + 8 and
-                (self.cycle - 1) >= sprite_x and (self.cycle - 1) < sprite_x + 8)
-            {
-                const sprite_pixel_y: u3 = @intCast(self.scanline - sprite_y);
+            if (y >= sprite_y and y < sprite_y + 8 and x >= sprite_x and x < sprite_x + 8) {
+                const sprite_pixel_y: u3 = @intCast(y - sprite_y);
                 const sprite_chr_index: usize = @as(usize, sprite_tile) * 16;
                 const sprite_plane0 = self.cartridge.chr_rom[sprite_chr_index + sprite_pixel_y];
                 const sprite_plane1 = self.cartridge.chr_rom[sprite_chr_index + 8 + sprite_pixel_y];
-                const sprite_bit_x: u3 = @intCast((self.cycle - 1) - sprite_x);
+                const sprite_bit_x: u3 = @intCast(x - sprite_x);
                 const sprite_bit_index: u3 = 7 - sprite_bit_x;
 
                 const sbit0 = (sprite_plane0 >> sprite_bit_index) & 1;
@@ -306,29 +343,26 @@ pub const PPU = struct {
 
                 if (sprite_color_index != 0) {
                     self.registers.status.sprite0_hit = true;
-                    std.debug.print("Sprite 0 hit at scanline={d}, cycle={d}\n", .{ self.scanline, self.cycle });
+                    std.debug.print("Sprite 0 hit at scanline={d}, cycle={d}\n", .{ y, x + 1 });
                 }
             }
         }
 
-        const x_u8: u8 = @intCast(ux);
-        const y_u8: u8 = @intCast(uy);
-
-        const attr_table_base: usize = 0x23C0;
+        const attr_table_base = 0x23C0;
         const attr_x = tile_x / 4;
         const attr_y = tile_y / 4;
         const attr_index = attr_y * 8 + attr_x;
-        const attr_byte = self.vram[attr_table_base + attr_index];
+        const attr_byte = self.vram.read(attr_table_base + @as(u16, attr_index));
 
         const offset_y = (tile_y % 4) / 2;
         const offset_x = (tile_x % 4) / 2;
         const shift: u3 = @intCast((offset_y * 2 + offset_x) * 2);
         const palette_number = (attr_byte >> shift) & 0b11;
 
-        const palette_index = self.palette_table[palette_number * 4 + color_index];
+        const palette_index = self.vram.palette[palette_number * 4 + color_index];
         const color = NES_PALETTE[palette_index];
 
-        fb.setPixel(x_u8, y_u8, color);
+        fb.setPixel(@intCast(x), @intCast(y), color);
     }
 
     pub fn writeRegister(self: *PPU, reg: u3, value: u8) void {
@@ -413,7 +447,7 @@ pub const PPU = struct {
             }
 
             if (mirrored_addr >= 0x2000 and mirrored_addr < 0x2800) {
-                self.vram[mirrored_addr] = value;
+                self.vram.write(mirrored_addr, value);
             } else {
                 std.debug.print("Invalid mirrored address", .{});
             }
@@ -425,7 +459,7 @@ pub const PPU = struct {
             }
 
             if (mirrored_addr >= 0x2000 and mirrored_addr < 0x2800) {
-                self.vram[mirrored_addr] = value;
+                self.vram.write(mirrored_addr, value);
             } else {
                 std.debug.print("Invalid mirrored address", .{});
             }
@@ -439,7 +473,7 @@ pub const PPU = struct {
             if (palette_addr == 0x18) palette_addr = 0x08;
             if (palette_addr == 0x1C) palette_addr = 0x0C;
 
-            self.palette_table[palette_addr] = value;
+            self.vram.palette[palette_addr] = value;
         } else {
             std.debug.print("Invalid PPU address", .{});
         }
@@ -451,6 +485,41 @@ pub const PPU = struct {
             const new_addr = (self.registers.scroll_unit.v.read() + 1) & 0x7FFF;
             self.registers.scroll_unit.v.write(new_addr);
         }
+    }
+
+    fn readData(self: *PPU) u8 {
+        const addr = self.registers.scroll_unit.v.read() & 0x3FFF;
+        var result: u8 = 0;
+
+        if (addr < 0x2000) {
+            result = self.cartridge.readCHR(addr);
+            self.vram.buffer = result; // Update buffer with CHR read
+            return result; // CHR ROM/RAM read
+        }
+
+        if (addr < 0x3F00) {
+            result = self.vram.buffer;
+            self.vram.buffer = self.vram.read(addr);
+        } else if (addr < 0x4000) {
+            const palette_index = switch (addr & 0x1F) {
+                0x10 => 0x00,
+                0x14 => 0x04,
+                0x18 => 0x08,
+                0x1C => 0x0C,
+                else => addr & 0x1F,
+            };
+            result = self.vram.palette[palette_index];
+            const mirrored = addr - 0x1000;
+            self.vram.buffer = self.vram.read(mirrored);
+        }
+
+        if ((self.registers.ctrl >> 2) & 0b1 == 1) {
+            self.registers.scroll_unit.incrementVertical();
+        } else {
+            self.registers.scroll_unit.incrementHorizontal();
+        }
+
+        return result;
     }
 
     fn readStatus(self: *PPU) u8 {
@@ -469,39 +538,13 @@ pub const PPU = struct {
         return self.registers.oam_data[self.registers.oam_addr];
     }
 
-    fn readData(self: *PPU) u8 {
-        const addr = self.registers.scroll_unit.v.read() & 0x3FFF;
-        var result: u8 = 0;
-
-        if (addr < 0x2000) {
-            result = self.cartridge.readCHR(addr);
-            self.registers.vram_buffer = result; // Update buffer with CHR read
-            return result; // CHR ROM/RAM read
-        }
-
-        if (addr < 0x3F00) {
-            result = self.registers.vram_buffer;
-            self.registers.vram_buffer = self.vram[addr];
-        } else if (addr < 0x4000) {
-            const palette_index = switch (addr & 0x1F) {
-                0x10 => 0x00,
-                0x14 => 0x04,
-                0x18 => 0x08,
-                0x1C => 0x0C,
-                else => addr & 0x1F,
-            };
-            result = self.palette_table[palette_index];
-
-            const mirrored = addr - 0x1000;
-            self.registers.vram_buffer = self.vram[mirrored];
-        }
-
+    fn incrementVRAMAddress(self: *PPU) void {
         if ((self.registers.ctrl >> 2) & 0b1 == 1) {
-            self.registers.scroll_unit.incrementVertical();
+            const new_addr = (self.registers.scroll_unit.v.read() + 32) & 0x7FFF;
+            self.registers.scroll_unit.v.write(new_addr);
         } else {
-            self.registers.scroll_unit.incrementHorizontal();
+            const new_addr = (self.registers.scroll_unit.v.read() + 1) & 0x7FFF;
+            self.registers.scroll_unit.v.write(new_addr);
         }
-
-        return result;
     }
 };
