@@ -60,7 +60,7 @@ pub fn main() !void {
         defer allocator.free(filename);
         try fb.writePPM(filename);
 
-        std.debug.print("Frame {}: {} cycles\n", .{ frame_num, frame_cycles });
+        // std.debug.print("Frame {}: {} cycles\n", .{ frame_num, frame_cycles });
 
         var frame_counter: usize = 0;
         // if (frame_counter == 0) {
