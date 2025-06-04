@@ -69,33 +69,30 @@ pub const VRAM = struct {
     }
 
     pub fn read(self: *VRAM, addr: u16) u8 {
-        // const masked = addr;
-        // if (masked >= 0x3F00) {
-        //     var palette_addr = masked & 0x1F;
-        //     if (palette_addr == 0x10) palette_addr = 0x00;
-        //     if (palette_addr == 0x14) palette_addr = 0x04;
-        //     if (palette_addr == 0x18) palette_addr = 0x08;
-        //     if (palette_addr == 0x1C) palette_addr = 0x0C;
-        //     return self.palette[palette_addr];
-        // } else {
-        //     return self.memory[masked];
-        // }
         return self.memory[addr];
     }
 
+    pub fn readPalette(self: *VRAM, addr: u16) u8 {
+        const palette_addr = self.resolvePaletteAddr(addr);
+        return self.palette[palette_addr];
+    }
+
     pub fn write(self: *VRAM, addr: u16, value: u8) void {
-        // const masked = addr;
-        // if (masked >= 0x3F00) {
-        //     var palette_addr = masked & 0x1F;
-        //     if (palette_addr == 0x10) palette_addr = 0x00;
-        //     if (palette_addr == 0x14) palette_addr = 0x04;
-        //     if (palette_addr == 0x18) palette_addr = 0x08;
-        //     if (palette_addr == 0x1C) palette_addr = 0x0C;
-        //     self.palette[palette_addr] = value;
-        // } else {
-        //     self.memory[masked] = value;
-        // }
         self.memory[addr] = value;
+    }
+
+    pub fn writePalette(self: *VRAM, addr: u16, value: u8) void {
+        const palette_addr = self.resolvePaletteAddr(addr);
+        self.palette[palette_addr] = value;
+    }
+
+    fn resolvePaletteAddr(_: *VRAM, addr: u16) u16 {
+        var palette_addr = addr & 0x1F;
+        if (palette_addr == 0x10) palette_addr = 0x00;
+        if (palette_addr == 0x14) palette_addr = 0x04;
+        if (palette_addr == 0x18) palette_addr = 0x08;
+        if (palette_addr == 0x1C) palette_addr = 0x0C;
+        return palette_addr;
     }
 };
 
@@ -308,7 +305,6 @@ pub const PPU = struct {
         const name_table_index = tile_y * 32 + tile_x;
         const tile_id = self.vram.read(0x2000 + @as(u16, name_table_index));
 
-        // ピクセル座標（タイル内）
         const pixel_x: u3 = @intCast(x % 8);
         const pixel_y: u3 = @intCast(y % 8);
 
@@ -321,7 +317,6 @@ pub const PPU = struct {
         const bit1 = (plane1 >> bit_index) & 1;
         const color_index = (bit1 << 1) | bit0;
 
-        // Sprite 0 Hit 処理（現状のまま）
         if (!self.registers.status.sprite0_hit and
             y < 240 and x < 256 and color_index != 0)
         {
@@ -374,14 +369,14 @@ pub const PPU = struct {
             // 3 => self.writeOamAddr(value),
             // 4 => self.writeOamData(value),
             3 => {
-                self.oam_accessing = true;
+                // self.oam_accessing = true;
                 self.writeOamAddr(value);
-                self.oam_accessing = false;
+                // self.oam_accessing = false;
             },
             4 => {
-                self.oam_accessing = true;
+                // self.oam_accessing = true;
                 self.writeOamData(value);
-                self.oam_accessing = false;
+                // self.oam_accessing = false;
             },
             5 => self.registers.scroll_unit.writeScroll(value),
             6 => self.registers.scroll_unit.writeAddr(value),
@@ -464,16 +459,7 @@ pub const PPU = struct {
                 std.debug.print("Invalid mirrored address", .{});
             }
         } else if (addr >= 0x3F00 and addr < 0x4000) {
-            // パレットメモリ: 0x3F00-0x3FFF
-            var palette_addr = addr & 0x1F; // 32バイトでリピート
-
-            // パレットの特殊ミラーリング
-            if (palette_addr == 0x10) palette_addr = 0x00;
-            if (palette_addr == 0x14) palette_addr = 0x04;
-            if (palette_addr == 0x18) palette_addr = 0x08;
-            if (palette_addr == 0x1C) palette_addr = 0x0C;
-
-            self.vram.palette[palette_addr] = value;
+            self.vram.writePalette(addr, value);
         } else {
             std.debug.print("Invalid PPU address", .{});
         }
@@ -501,14 +487,7 @@ pub const PPU = struct {
             result = self.vram.buffer;
             self.vram.buffer = self.vram.read(addr);
         } else if (addr < 0x4000) {
-            const palette_index = switch (addr & 0x1F) {
-                0x10 => 0x00,
-                0x14 => 0x04,
-                0x18 => 0x08,
-                0x1C => 0x0C,
-                else => addr & 0x1F,
-            };
-            result = self.vram.palette[palette_index];
+            result = self.vram.readPalette(addr);
             const mirrored = addr - 0x1000;
             self.vram.buffer = self.vram.read(mirrored);
         }
