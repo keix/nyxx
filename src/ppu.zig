@@ -1,6 +1,7 @@
 const std = @import("std");
 const Bus = @import("bus.zig").Bus;
 const Cartridge = @import("cartridge.zig").Cartridge;
+const Mirroring = @import("cartridge.zig").Mirroring;
 
 const VISIBLE_SCANLINES = 240;
 const CYCLES_PER_SCANLINE = 341;
@@ -40,11 +41,13 @@ pub const VRAM = struct {
     memory: [0x4000]u8 = [_]u8{0} ** 0x4000,
     palette: [32]u8 = [_]u8{0} ** 32,
     buffer: u8 = 0, // Buffer for PPU data reads
+    mirroring: Mirroring,
 
-    pub fn init() VRAM {
+    pub fn init(mirroring: Mirroring) VRAM {
         var vram = VRAM{
             .memory = [_]u8{0} ** 0x4000,
             .palette = [_]u8{0} ** 32,
+            .mirroring = mirroring,
         };
 
         vram.palette = [_]u8{
@@ -69,7 +72,17 @@ pub const VRAM = struct {
     }
 
     pub fn read(self: *VRAM, addr: u16) u8 {
-        return self.memory[addr];
+        const resolved_addr = switch (addr) {
+            0x3000...0x3EFF => addr - 0x1000,
+            else => addr,
+        };
+
+        if (resolved_addr >= 0x2000 and resolved_addr < 0x3000) {
+            const mirrored = self.resolveMirroredAddr(resolved_addr);
+            return self.memory[mirrored];
+        }
+
+        return self.memory[resolved_addr];
     }
 
     pub fn readPalette(self: *VRAM, addr: u16) u8 {
@@ -78,7 +91,9 @@ pub const VRAM = struct {
     }
 
     pub fn write(self: *VRAM, addr: u16, value: u8) void {
-        self.memory[addr] = value;
+        const masked = addr & 0x2FFF;
+        const resolved = 0x2000 + self.resolveMirroredAddr(masked);
+        self.memory[resolved] = value;
     }
 
     pub fn writePalette(self: *VRAM, addr: u16, value: u8) void {
@@ -93,6 +108,25 @@ pub const VRAM = struct {
         if (palette_addr == 0x18) palette_addr = 0x08;
         if (palette_addr == 0x1C) palette_addr = 0x0C;
         return palette_addr;
+    }
+
+    fn resolveMirroredAddr(self: *VRAM, addr: u16) u16 {
+        const offset = addr - 0x2000; // 0x000-0xFFF
+        const name_table_index = offset / 0x400; // 0, 1, 2, 3
+        const local_offset = offset % 0x400; // ネームテーブル内のオフセット
+
+        return switch (self.mirroring) {
+            .Vertical => switch (name_table_index) {
+                0, 2 => local_offset, // → VRAM 0x000-0x3FF
+                1, 3 => 0x400 + local_offset, // → VRAM 0x400-0x7FF
+                else => std.debug.panic("Invalid name table index: {d}", .{name_table_index}),
+            },
+            .Horizontal => switch (name_table_index) {
+                0, 1 => local_offset, // → VRAM 0x000-0x3FF
+                2, 3 => 0x400 + local_offset, // → VRAM 0x400-0x7FF
+                else => std.debug.panic("Invalid name table index: {d}", .{name_table_index}),
+            },
+        };
     }
 };
 
@@ -226,8 +260,6 @@ const Registers = struct {
 
 pub const PPU = struct {
     registers: Registers,
-    // vram: [0x4000]u8 = [_]u8{0} ** 0x4000, // VRAM
-    // palette_table: [32]u8 = [_]u8{0} ** 32,
     vram: VRAM,
     _vblank_injected: bool = false,
 
@@ -246,16 +278,25 @@ pub const PPU = struct {
             if ((addr - start) % 32 == 0) {
                 std.debug.print("\n0x{X:04}: ", .{addr});
             }
-            std.debug.print("{X:02} ", .{self.vram[addr]});
+            std.debug.print("{X:02} ", .{self.vram.memory[addr]});
         }
         std.debug.print("\n", .{});
+    }
+
+    fn debugV(v: u16) void {
+        std.debug.print("PPU V register: 0x{X:04} (coarse_x={d}, coarse_y={d}, fine_y={d}, nametable={d})\n", .{
+            v,
+            v & 0x1F, // coarse_x
+            (v >> 5) & 0x1F, // coarse_y
+            (v >> 12) & 0x07, // fine_y
+            (v >> 10) & 0x03, // nametable
+        });
     }
 
     pub fn init(cartridge: *Cartridge) PPU {
         return PPU{
             .registers = .{},
-            .vram = VRAM.init(),
-            // .palette_table = [_]u8{0} ** 32,
+            .vram = VRAM.init(cartridge.mirroring),
             ._vblank_injected = false,
             .cycle = 0,
             .scanline = -1, // pre-render line
@@ -303,7 +344,11 @@ pub const PPU = struct {
         const tile_x = x / 8;
         const tile_y = y / 8;
         const name_table_index = tile_y * 32 + tile_x;
-        const tile_id = self.vram.read(0x2000 + @as(u16, name_table_index));
+        // const tile_id = self.vram.read(0x2000 + @as(u16, name_table_index));
+        const tile_id = self.vram.memory[0x2000 + @as(u16, name_table_index)];
+
+        // const v = self.registers.scroll_unit.v.read();
+        // debugV(v);
 
         const pixel_x: u3 = @intCast(x % 8);
         const pixel_y: u3 = @intCast(y % 8);
@@ -338,7 +383,7 @@ pub const PPU = struct {
 
                 if (sprite_color_index != 0) {
                     self.registers.status.sprite0_hit = true;
-                    std.debug.print("Sprite 0 hit at scanline={d}, cycle={d}\n", .{ y, x + 1 });
+                    // std.debug.print("Sprite 0 hit at scanline={d}, cycle={d}\n", .{ y, x + 1 });
                 }
             }
         }
@@ -347,14 +392,16 @@ pub const PPU = struct {
         const attr_x = tile_x / 4;
         const attr_y = tile_y / 4;
         const attr_index = attr_y * 8 + attr_x;
-        const attr_byte = self.vram.read(attr_table_base + @as(u16, attr_index));
+        // const attr_byte = self.vram.read(attr_table_base + @as(u16, attr_index));
+        const attr_byte = self.vram.memory[attr_table_base + @as(u16, attr_index)];
 
         const offset_y = (tile_y % 4) / 2;
         const offset_x = (tile_x % 4) / 2;
         const shift: u3 = @intCast((offset_y * 2 + offset_x) * 2);
         const palette_number = (attr_byte >> shift) & 0b11;
 
-        const palette_index = self.vram.palette[palette_number * 4 + color_index];
+        // const palette_index = self.vram.palette[palette_number * 4 + color_index];
+        const palette_index = self.vram.readPalette(@as(u16, 0x3F00) + @as(u16, palette_number) * 4 + @as(u16, color_index));
         const color = NES_PALETTE[palette_index];
 
         fb.setPixel(@intCast(x), @intCast(y), color);
@@ -434,34 +481,10 @@ pub const PPU = struct {
             return; // CHR ROM/RAM write
         }
 
-        if (addr >= 0x2000 and addr < 0x3000) {
-            var mirrored_addr = addr;
-
-            if (addr >= 0x2800) {
-                mirrored_addr = addr - 0x800;
-            }
-
-            if (mirrored_addr >= 0x2000 and mirrored_addr < 0x2800) {
-                self.vram.write(mirrored_addr, value);
-            } else {
-                std.debug.print("Invalid mirrored address", .{});
-            }
-        } else if (addr >= 0x3000 and addr < 0x3F00) {
-            var mirrored_addr = addr - 0x1000;
-
-            if (mirrored_addr >= 0x2800) {
-                mirrored_addr = mirrored_addr - 0x800;
-            }
-
-            if (mirrored_addr >= 0x2000 and mirrored_addr < 0x2800) {
-                self.vram.write(mirrored_addr, value);
-            } else {
-                std.debug.print("Invalid mirrored address", .{});
-            }
+        if (addr >= 0x2000 and addr < 0x3F00) {
+            self.vram.write(addr, value);
         } else if (addr >= 0x3F00 and addr < 0x4000) {
             self.vram.writePalette(addr, value);
-        } else {
-            std.debug.print("Invalid PPU address", .{});
         }
 
         if ((self.registers.ctrl >> 2) & 0b1 == 1) {
@@ -489,6 +512,7 @@ pub const PPU = struct {
         } else if (addr < 0x4000) {
             result = self.vram.readPalette(addr);
             const mirrored = addr - 0x1000;
+            // const mirrored = addr & 0x2FFF;
             self.vram.buffer = self.vram.read(mirrored);
         }
 
