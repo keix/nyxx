@@ -426,6 +426,8 @@ pub const PPU = struct {
 
     pub fn writeRegister(self: *PPU, reg: u3, value: u8) void {
         self.open_bus = value;
+        self.open_bus_decay_counter = 0; // Reset decay counter on write
+
         switch (reg) {
             0 => self.writeCtrl(value),
             1 => self.writeMask(value),
@@ -451,9 +453,11 @@ pub const PPU = struct {
     pub fn readRegister(self: *PPU, reg: u3) u8 {
         return switch (reg) {
             2 => {
-                const val = self.registers.status.read();
-                self.open_bus = val;
-                self.registers.scroll_unit.resetLatch();
+                // const val = self.registers.status.read();
+                // self.open_bus = val;
+                // self.registers.scroll_unit.resetLatch();
+                // return val;
+                const val = self.readStatus();
                 return val;
             },
             4 => {
@@ -534,9 +538,11 @@ pub const PPU = struct {
             result = self.vram.buffer;
             self.vram.buffer = self.vram.read(addr);
         } else if (addr < 0x4000) {
-            result = self.vram.readPalette(addr);
-            // const mirrored = addr - 0x1000;
-            // self.vram.buffer = self.vram.read(mirrored);
+            // result = self.vram.readPalette(addr);
+
+            const palette = self.vram.readPalette(addr);
+            const high2 = self.open_bus & 0b1100_0000;
+            result = high2 | (palette & 0b0011_1111);
         }
 
         if ((self.registers.ctrl >> 2) & 0b1 == 1) {
@@ -549,19 +555,34 @@ pub const PPU = struct {
     }
 
     fn readStatus(self: *PPU) u8 {
-        var value: u8 = 0;
-        value |= @as(u8, @intFromBool(self.registers.status.vblank)) << 7;
-        value |= @as(u8, @intFromBool(self.registers.status.sprite0_hit)) << 6;
-        value |= @as(u8, @intFromBool(self.registers.status.sprite_overflow)) << 5;
-        value |= self.open_bus & 0b0001_1111;
-        self.open_bus = value;
+        const low5 = self.open_bus & 0b0001_1111;
+        const status = self.registers.status;
+        const high3: u8 =
+            (@as(u8, @intFromBool(status.vblank)) << 7) |
+            (@as(u8, @intFromBool(status.sprite0_hit)) << 6) |
+            (@as(u8, @intFromBool(status.sprite_overflow)) << 5);
+
+        const result = high3 | low5;
+
+        self.open_bus = result;
         self.registers.scroll_unit.resetLatch();
         self.registers.status.vblank = false;
-        return value;
+
+        return result;
     }
 
+    // fn readOamData(self: *PPU) u8 {
+    //     return self.registers.oam_data[self.registers.oam_addr];
+    // }
     fn readOamData(self: *PPU) u8 {
-        return self.registers.oam_data[self.registers.oam_addr];
+        const index = self.registers.oam_addr;
+
+        if (index % 4 == 2) {
+            const raw = self.registers.oam_data[index];
+            return raw & 0b1110_0011;
+        }
+
+        return self.registers.oam_data[index];
     }
 
     fn incrementVRAMAddress(self: *PPU) void {
