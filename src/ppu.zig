@@ -38,14 +38,14 @@ pub const FrameBuffer = struct {
 };
 
 pub const VRAM = struct {
-    memory: [0x4000]u8 = [_]u8{0} ** 0x4000,
+    memory: [0x800]u8 = [_]u8{0} ** 0x800,
     palette: [32]u8 = [_]u8{0} ** 32,
     buffer: u8 = 0, // Buffer for PPU data reads
     mirroring: Mirroring,
 
     pub fn init(mirroring: Mirroring) VRAM {
         var vram = VRAM{
-            .memory = [_]u8{0} ** 0x4000,
+            .memory = [_]u8{0} ** 0x800,
             .palette = [_]u8{0} ** 32,
             .mirroring = mirroring,
         };
@@ -82,7 +82,8 @@ pub const VRAM = struct {
             return self.memory[mirrored];
         }
 
-        return self.memory[resolved_addr];
+        // return self.memory[resolved_addr];
+        std.debug.panic("VRAM read invalid address: 0x{X}", .{addr});
     }
 
     pub fn readPalette(self: *VRAM, addr: u16) u8 {
@@ -91,9 +92,15 @@ pub const VRAM = struct {
     }
 
     pub fn write(self: *VRAM, addr: u16, value: u8) void {
-        const masked = addr & 0x2FFF;
-        const resolved = 0x2000 + self.resolveMirroredAddr(masked);
-        self.memory[resolved] = value;
+        const resolved_addr = switch (addr) {
+            0x3000...0x3EFF => addr - 0x1000,
+            else => addr,
+        };
+
+        if (resolved_addr >= 0x2000 and resolved_addr < 0x3000) {
+            const mirrored = self.resolveMirroredAddr(resolved_addr);
+            self.memory[mirrored] = value;
+        }
     }
 
     pub fn writePalette(self: *VRAM, addr: u16, value: u8) void {
@@ -270,6 +277,7 @@ pub const PPU = struct {
     open_bus: u8 = 0, // Open bus for PPU read operations
     dma_active: bool = false,
     oam_accessing: bool = false,
+    open_bus_decay_counter: u8 = 0, // Decay counter for open bus
 
     pub fn dumpNameTable(self: *PPU) void {
         const start = 0x2000;
@@ -329,6 +337,15 @@ pub const PPU = struct {
                 self.frame += 1;
             }
         }
+
+        if (self.scanline == 261 and self.cycle == 0) {
+            if (self.open_bus_decay_counter < 60) {
+                self.open_bus_decay_counter += 1;
+            }
+            if (self.open_bus_decay_counter >= 60) {
+                self.open_bus = 0;
+            }
+        }
     }
 
     pub fn isFrameComplete(self: *PPU) bool {
@@ -344,8 +361,8 @@ pub const PPU = struct {
         const tile_x = x / 8;
         const tile_y = y / 8;
         const name_table_index = tile_y * 32 + tile_x;
-        // const tile_id = self.vram.read(0x2000 + @as(u16, name_table_index));
-        const tile_id = self.vram.memory[0x2000 + @as(u16, name_table_index)];
+        const tile_id = self.vram.read(0x2000 + @as(u16, name_table_index));
+        // const tile_id = self.vram.memory[0x2000 + @as(u16, name_table_index)];
 
         // const v = self.registers.scroll_unit.v.read();
         // debugV(v);
@@ -388,12 +405,12 @@ pub const PPU = struct {
             }
         }
 
-        const attr_table_base = 0x23C0;
+        const attr_table_base = 0x03C0;
         const attr_x = tile_x / 4;
         const attr_y = tile_y / 4;
         const attr_index = attr_y * 8 + attr_x;
-        // const attr_byte = self.vram.read(attr_table_base + @as(u16, attr_index));
-        const attr_byte = self.vram.memory[attr_table_base + @as(u16, attr_index)];
+        const attr_byte = self.vram.read(0x2000 + attr_table_base + @as(u16, attr_index));
+        // const attr_byte = self.vram.memory[attr_table_base + @as(u16, attr_index)];
 
         const offset_y = (tile_y % 4) / 2;
         const offset_x = (tile_x % 4) / 2;
@@ -445,8 +462,15 @@ pub const PPU = struct {
                 return val;
             },
             7 => {
+                // const val = self.readData();
+                // self.open_bus = val;
+                // return val;
+                const addr = self.registers.scroll_unit.v.read() & 0x3FFF;
+                const is_palette = addr >= 0x3F00 and addr < 0x4000;
                 const val = self.readData();
-                self.open_bus = val;
+                if (!is_palette) {
+                    self.open_bus = val;
+                }
                 return val;
             },
             else => self.open_bus, // Open bus for other registers
@@ -511,9 +535,8 @@ pub const PPU = struct {
             self.vram.buffer = self.vram.read(addr);
         } else if (addr < 0x4000) {
             result = self.vram.readPalette(addr);
-            const mirrored = addr - 0x1000;
-            // const mirrored = addr & 0x2FFF;
-            self.vram.buffer = self.vram.read(mirrored);
+            // const mirrored = addr - 0x1000;
+            // self.vram.buffer = self.vram.read(mirrored);
         }
 
         if ((self.registers.ctrl >> 2) & 0b1 == 1) {

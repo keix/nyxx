@@ -65,9 +65,9 @@ pub fn main() !void {
 
         // std.debug.print("Frame {}: {} cycles\n", .{ frame_num, frame_cycles });
 
-        if (frame_counter == 100) {
-            bus.ppu.dumpNameTable();
-        }
+        // if (frame_counter == 100) {
+        //     bus.ppu.dumpNameTable();
+        // }
         frame_counter += 1;
     }
 }
