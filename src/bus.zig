@@ -67,6 +67,9 @@ pub const Bus = struct {
                 const reg: u3 = @intCast(addr & 0x0007);
                 self.ppu.writeRegister(reg, value);
             },
+            //           0x6000...0x7FFF => {
+            //               std.debug.print("Ignoring write to mapper RAM at {x}\n", .{addr});
+            //           },
             0x8000...0xFFFF => {},
             else => {},
         }
