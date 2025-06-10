@@ -39,7 +39,7 @@ pub fn main() !void {
     try stdout.print("Starting execution...\n", .{});
     var frame_counter: usize = 0;
 
-    for (0..550) |frame_num| {
+    for (0..5000) |frame_num| {
         var frame_cycles: u32 = 0;
         const target_cycles = 29780;
 

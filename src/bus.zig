@@ -63,10 +63,7 @@ pub const Bus = struct {
         }
         switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF] = value,
-            0x2000...0x3FFF => {
-                const reg: u3 = @intCast(addr & 0x0007);
-                self.ppu.writeRegister(reg, value);
-            },
+            0x2000...0x3FFF => self.ppu.writeRegister(@intCast(addr & 0x0007), value),
             //           0x6000...0x7FFF => {
             //               std.debug.print("Ignoring write to mapper RAM at {x}\n", .{addr});
             //           },
