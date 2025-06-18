@@ -29,13 +29,13 @@ pub const Bus = struct {
         return switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF],
             0x8000...0xFFFF => self.cartridge.read(addr),
-            else => self.ppu.open_bus,
+            else => self.ppu.open_bus.read(),
         };
     }
 
     pub fn read(self: *Bus, addr: u16) u8 {
         if (self.ppu.dma_active and addr == 0x2007) {
-            return self.ppu.open_bus;
+            return self.ppu.open_bus.read();
         }
 
         return switch (addr) {

@@ -280,19 +280,75 @@ const Registers = struct {
     scroll_unit: ScrollUnit = .{}, // $2005 + $2006 + fine X scroll
 };
 
+// Open bus decay timing for each bit
+// Based on Visual 2C02 analysis: different bits decay at different rates
+const OpenBusDecay = struct {
+    data: u8 = 0,
+    // Each bit has its own decay timer (in PPU cycles)
+    // bit 7-5: ~600000 cycles (10 seconds at 60Hz)
+    // bit 4: ~300000 cycles (5 seconds)
+    // bit 3-0: ~180000 cycles (3 seconds)
+    bit_timers: [8]u32 = [_]u32{0} ** 8,
+
+    const DECAY_CYCLES_LOW = 180000; // bits 3-0
+    const DECAY_CYCLES_MID = 300000; // bit 4
+    const DECAY_CYCLES_HIGH = 600000; // bits 7-5
+
+    pub fn write(self: *OpenBusDecay, value: u8) void {
+        self.data = value;
+        // Reset all bit timers on write
+        self.bit_timers = [_]u32{0} ** 8;
+    }
+
+    pub fn read(self: *OpenBusDecay) u8 {
+        return self.data;
+    }
+
+    pub fn tick(self: *OpenBusDecay) void {
+        // Increment timers for each bit
+        for (0..8) |i| {
+            self.bit_timers[i] += 1;
+
+            // Check if bit should decay
+            const decay_threshold: u32 = if (i <= 3)
+                DECAY_CYCLES_LOW
+            else if (i == 4)
+                DECAY_CYCLES_MID
+            else
+                DECAY_CYCLES_HIGH;
+
+            if (self.bit_timers[i] >= decay_threshold) {
+                // Clear the bit
+                self.data &= ~(@as(u8, 1) << @intCast(i));
+            }
+        }
+    }
+
+    pub fn refresh_bits(self: *OpenBusDecay, value: u8, mask: u8) void {
+        // Refresh specific bits and reset their timers
+        self.data = (self.data & ~mask) | (value & mask);
+
+        // Reset timers for refreshed bits
+        for (0..8) |i| {
+            if ((mask >> @intCast(i)) & 1 == 1) {
+                self.bit_timers[i] = 0;
+            }
+        }
+    }
+};
+
 pub const PPU = struct {
     registers: Registers,
     vram: VRAM,
     _vblank_injected: bool = false,
 
     cycle: u16 = 0,
-    scanline: i16 = 0, // -1 (pre-render) 〜 260 (post-render)
+    scanline: i16 = -1, // -1 (pre-render) 〜 260 (vblank)
     frame: usize = 0,
     cartridge: *Cartridge,
-    open_bus: u8 = 0, // Open bus for PPU read operations
+    open_bus: OpenBusDecay = .{}, // Open bus with proper decay
     dma_active: bool = false,
     oam_accessing: bool = false,
-    open_bus_decay_counter: u8 = 0, // Decay counter for open bus
 
     pub fn dumpNameTable(self: *PPU) void {
         const start = 0x2000;
@@ -322,7 +378,7 @@ pub const PPU = struct {
             .vram = VRAM.init(cartridge.mirroring),
             ._vblank_injected = false,
             .cycle = 0,
-            .scanline = -1, // pre-render line
+            .scanline = -1, // Start at pre-render line
             .frame = 0,
             .cartridge = cartridge,
         };
@@ -337,34 +393,33 @@ pub const PPU = struct {
             self.registers.status.vblank = true;
         }
 
-        if (self.scanline == 261 and self.cycle == 1) {
+        // Pre-render scanline (-1)
+        if (self.scanline == -1 and self.cycle == 1) {
             self.registers.status.vblank = false;
             self._vblank_injected = false;
             self.registers.status.sprite0_hit = false; // Reset sprite 0 hit flag
+            self.registers.status.sprite_overflow = false; // Reset sprite overflow flag
         }
 
         self.cycle += 1;
         if (self.cycle > 340) {
             self.cycle = 0;
             self.scanline += 1;
-            if (self.scanline > 261) {
-                self.scanline = 0;
+
+            // After scanline 260, wrap to -1 (pre-render)
+            if (self.scanline > 260) {
+                self.scanline = -1;
                 self.frame += 1;
             }
         }
 
-        if (self.scanline == 261 and self.cycle == 0) {
-            if (self.open_bus_decay_counter < ONE_SECOND) {
-                self.open_bus_decay_counter += 1;
-            }
-            if (self.open_bus_decay_counter >= ONE_SECOND) {
-                self.open_bus = 0;
-            }
-        }
+        // Tick open bus decay every cycle
+        self.open_bus.tick();
     }
 
     pub fn isFrameComplete(self: *PPU) bool {
-        return self.scanline == 0 and self.cycle == 0;
+        // Frame is complete when we transition from scanline 260 to -1
+        return self.scanline == -1 and self.cycle == 0;
     }
 
     fn renderPixel(self: *PPU, fb: *FrameBuffer) !void {
@@ -375,8 +430,14 @@ pub const PPU = struct {
 
         const tile_x = x / 8;
         const tile_y = y / 8;
+
+        // Get nametable from current vram address
+        const v = self.registers.scroll_unit.v.read();
+        const nametable_select = (v >> 10) & 0x03;
+        const nametable_base = 0x2000 + @as(u16, nametable_select) * 0x400;
+
         const name_table_index = tile_y * 32 + tile_x;
-        const tile_id = self.vram.read(@as(u16, 0x2000 + @as(u16, name_table_index)));
+        const tile_id = self.vram.read(nametable_base + name_table_index);
 
         const pixel_x: u3 = @intCast(x % 8);
         const pixel_y: u3 = @intCast(y % 8);
@@ -418,10 +479,6 @@ pub const PPU = struct {
             }
         }
 
-        // const v = self.registers.scroll_unit.v.read();
-        // const nametable_base = 0x2000 + @as(u16, self.registers.ctrl.nametable) * 0x400;
-        const nametable_base = 0x2000 + @as(u16, self.registers.scroll_unit.v.nametable) * 0x400;
-
         const attr_index = (tile_y / 4) * 8 + (tile_x / 4);
         const attr_addr = nametable_base + 0x03C0 + @as(u16, attr_index);
         const attr_byte = self.vram.read(attr_addr);
@@ -439,8 +496,8 @@ pub const PPU = struct {
     }
 
     pub fn writeRegister(self: *PPU, reg: u3, value: u8) void {
-        self.open_bus = value;
-        self.open_bus_decay_counter = 0; // Reset decay counter on write
+        // All writes refresh the full open bus
+        self.open_bus.write(value);
 
         switch (reg) {
             0 => self.writeCtrl(value),
@@ -456,15 +513,26 @@ pub const PPU = struct {
 
     pub fn readRegister(self: *PPU, reg: u3) u8 {
         return switch (reg) {
-            2 => return self.readStatus(),
-            4 => return self.readOamData(),
-            7 => return self.readData(),
-            else => self.open_bus, // Open bus for other registers
+            2 => self.readStatus(),
+            4 => self.readOamData(),
+            7 => self.readData(),
+            else => self.open_bus.read(), // Open bus for write-only registers
         };
     }
 
     fn writeCtrl(self: *PPU, value: u8) void {
+        const prev_nmi_output = self.registers.ctrl.generate_nmi;
         self.registers.ctrl.write(value);
+        self.registers.scroll_unit.t.nametable = @truncate(value & 0b0000_0011);
+        const new_nmi_output = self.registers.ctrl.generate_nmi;
+
+        if (prev_nmi_output == 0 and new_nmi_output == 1 and self.registers.status.vblank) {
+            self.registers.ctrl.generate_nmi = 1;
+        }
+
+        if (prev_nmi_output == 1 and new_nmi_output == 0) {
+            self.registers.ctrl.generate_nmi = 0;
+        }
     }
 
     fn writeMask(self: *PPU, value: u8) void {
@@ -503,17 +571,21 @@ pub const PPU = struct {
         var result: u8 = 0;
 
         if (addr < 0x2000) {
+            // CHR ROM/RAM: buffered read
             result = self.vram.buffer;
             self.vram.buffer = self.cartridge.readCHR(addr);
-            self.open_bus = result;
+            self.open_bus.write(result); // Full refresh
         } else if (addr < 0x3F00) {
+            // Nametable: buffered read
             result = self.vram.buffer;
             self.vram.buffer = self.vram.read(addr);
-            self.open_bus = result;
+            self.open_bus.write(result); // Full refresh
         } else if (addr < 0x4000) {
+            // Palette: immediate read, partial refresh
             const palette = self.vram.readPalette(addr);
-            const high2 = self.open_bus & 0b1100_0000;
-            result = high2 | (palette & 0b0011_1111);
+            // Keep high 2 bits from open bus, refresh low 6 bits
+            result = (self.open_bus.read() & 0b1100_0000) | (palette & 0b0011_1111);
+            self.open_bus.refresh_bits(palette, 0b0011_1111); // Only refresh low 6 bits
         }
 
         self.incrementVRAMAddress();
@@ -522,7 +594,8 @@ pub const PPU = struct {
 
     fn readStatus(self: *PPU) u8 {
         const status = self.registers.status;
-        const low5 = self.open_bus & 0b0001_1111;
+        // Keep low 5 bits from open bus
+        const low5 = self.open_bus.read() & 0b0001_1111;
         const high3: u8 =
             (@as(u8, @intFromBool(status.vblank)) << 7) |
             (@as(u8, @intFromBool(status.sprite0_hit)) << 6) |
@@ -530,7 +603,8 @@ pub const PPU = struct {
 
         const result = high3 | low5;
 
-        self.open_bus = result;
+        // Only refresh the high 3 bits
+        self.open_bus.refresh_bits(high3, 0b1110_0000);
         self.registers.scroll_unit.resetLatch();
         self.registers.status.vblank = false;
 
@@ -539,14 +613,21 @@ pub const PPU = struct {
 
     fn readOamData(self: *PPU) u8 {
         const index = self.registers.oam_addr;
+        var result: u8 = 0;
+
         if (index % 4 == 2) {
-            const raw = self.registers.oam_data[index];
-            self.open_bus = raw & 0b1110_0011; // Clear unused bits
+            // Attribute byte: bits 2-4 are unused and read from open bus
+            const oam_data = self.registers.oam_data[index];
+            const open_bus_bits = self.open_bus.read() & 0b0001_1100;
+            result = (oam_data & 0b1110_0011) | open_bus_bits;
+            // Refresh only the bits that came from OAM
+            self.open_bus.refresh_bits(oam_data, 0b1110_0011);
         } else {
-            self.open_bus = self.registers.oam_data[index];
+            result = self.registers.oam_data[index];
+            self.open_bus.write(result); // Full refresh
         }
 
-        return self.open_bus; // Return OAM data
+        return result;
     }
 
     fn incrementVRAMAddress(self: *PPU) void {
