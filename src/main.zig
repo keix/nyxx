@@ -42,6 +42,11 @@ pub fn main() !void {
     for (0..500) |frame_num| {
         var frame_cycles: u32 = 0;
         const target_cycles = 29780;
+        
+        // Debug: print frame start
+        if (frame_num < 10) {
+            try stdout.print("Main: Starting frame {}\n", .{frame_num});
+        }
 
         while (frame_cycles < target_cycles) {
             const cycles = cpu.step();
@@ -51,10 +56,8 @@ pub fn main() !void {
                 try bus.ppu.step(&fb);
             }
 
-            if (bus.ppu.registers.status.vblank and !bus.ppu._vblank_injected) {
-                bus.ppu._vblank_injected = true;
-                break;
-            }
+            // Remove the VBlank break - let NMI handle frame synchronization
+            // The frame will complete after running the full cycle count
         }
 
         if (frame_num % 10 == 0) {
