@@ -1,5 +1,7 @@
 const std = @import("std");
 
+pub const Mirroring = enum { Horizontal, Vertical };
+
 pub const Cartridge = struct {
     prg_rom: []u8,
     chr_rom: []u8,
@@ -7,6 +9,7 @@ pub const Cartridge = struct {
 
     mapper: u8,
     reset_vector: u16,
+    mirroring: Mirroring,
 
     pub fn loadFromFile(allocator: std.mem.Allocator, rom_file: []const u8) !Cartridge {
         const header_size = 16;
@@ -69,11 +72,32 @@ pub const Cartridge = struct {
                 std.debug.print("  byte[{}] = 0x{X:02}\n", .{ i, chr_rom[start + i] });
         }
 
+        if (chr_rom.len > start + 15) {
+            std.debug.print("\n=== Debug: CHR pattern for tile 0x{X:02} at offset 0x{X:04} ===\n", .{ tile_index, start });
+            for (0..8) |row| {
+                const plane0 = chr_rom[start + row];
+                const plane1 = chr_rom[start + 8 + row];
+
+                std.debug.print("Row {d:2}: ", .{row});
+                for (0..8) |bit| {
+                    const bit_index: u3 = @intCast(7 - bit);
+                    const low = (plane0 >> bit_index) & 1;
+                    const high = (plane1 >> bit_index) & 1;
+                    const color_index = (high << 1) | low;
+                    std.debug.print("{d}", .{color_index});
+                }
+
+                std.debug.print("\n", .{});
+            }
+        }
+
+        const mirroring = if ((header[6] & 0x01) != 0) Mirroring.Vertical else Mirroring.Horizontal;
         return Cartridge{
             .prg_rom = prg_rom,
             .chr_rom = chr_rom,
             .mapper = mapper,
             .reset_vector = reset_vector,
+            .mirroring = mirroring,
         };
     }
 
@@ -99,6 +123,10 @@ pub const Cartridge = struct {
     }
 
     pub fn writeCHR(self: *Cartridge, addr: u16, value: u8) void {
+        if (self.chr_rom.len > 0) {
+            // CHR ROM is read-only
+            return;
+        }
         if (addr < 0x2000) {
             // CHR RAM
             const offset = addr & 0x1FFF; // 8KB CHR RAM

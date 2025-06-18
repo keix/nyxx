@@ -39,11 +39,11 @@ const Flags = struct {
 
 const Registers = struct {
     // 6502 registers
-    a: u8 = 0,
-    x: u8 = 0,
-    y: u8 = 0,
-    s: u8 = 0xFD,
-    pc: u16 = 0x0000,
+    a: u8 = 0x00,
+    x: u8 = 0x00,
+    y: u8 = 0x00,
+    s: u8 = 0xFD, // Stack pointer starts at 0xFD
+    pc: u16 = 0x34,
     flags: Flags = .{},
 };
 
@@ -390,7 +390,7 @@ pub const CPU = struct {
     }
 
     inline fn getIndirectX(self: *CPU) u16 {
-        const base = (self.fetchU8() + self.registers.x) & 0xFF;
+        const base = (self.fetchU8() +% self.registers.x) & 0xFF;
         return self.readU16ZP(@as(u8, base));
     }
 
@@ -412,7 +412,7 @@ pub const CPU = struct {
 
     inline fn readU16ZP(self: *CPU, addr: u8) u16 {
         const low = self.readMemory(@as(u16, addr));
-        const high = self.readMemory(@as(u16, (addr + 1) & 0xFF));
+        const high = self.readMemory(@as(u16, (addr +% 1) & 0xFF));
         return @as(u16, low) | (@as(u16, high) << 8);
     }
 

@@ -37,8 +37,9 @@ pub fn main() !void {
     var fb = FrameBuffer{};
 
     try stdout.print("Starting execution...\n", .{});
+    var frame_counter: usize = 0;
 
-    for (0..355) |frame_num| {
+    for (0..500) |frame_num| {
         var frame_cycles: u32 = 0;
         const target_cycles = 29780;
 
@@ -56,16 +57,12 @@ pub fn main() !void {
             }
         }
 
-        const filename = try std.fmt.allocPrint(allocator, "test-results/framebuffer_{d:0>2}.ppm", .{frame_num});
-        defer allocator.free(filename);
-        try fb.writePPM(filename);
+        if (frame_num % 10 == 0) {
+            const filename = try std.fmt.allocPrint(allocator, "test-results/framebuffer_{d:0>2}.ppm", .{frame_num});
+            defer allocator.free(filename);
+            try fb.writePPM(filename);
+        }
 
-        std.debug.print("Frame {}: {} cycles\n", .{ frame_num, frame_cycles });
-
-        var frame_counter: usize = 0;
-        // if (frame_counter == 0) {
-        //     bus.ppu.dumpNameTable();
-        // }
         frame_counter += 1;
     }
 }
