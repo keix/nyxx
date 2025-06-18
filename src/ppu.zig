@@ -349,6 +349,7 @@ pub const PPU = struct {
     open_bus: OpenBusDecay = .{}, // Open bus with proper decay
     dma_active: bool = false,
     oam_accessing: bool = false,
+    open_bus_decay_counter: u8 = 0, // Decay counter for open bus
 
     pub fn dumpNameTable(self: *PPU) void {
         const start = 0x2000;
@@ -498,6 +499,7 @@ pub const PPU = struct {
     pub fn writeRegister(self: *PPU, reg: u3, value: u8) void {
         // All writes refresh the full open bus
         self.open_bus.write(value);
+
 
         switch (reg) {
             0 => self.writeCtrl(value),
