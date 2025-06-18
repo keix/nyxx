@@ -29,13 +29,13 @@ pub const Bus = struct {
         return switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF],
             0x8000...0xFFFF => self.cartridge.read(addr),
-            else => self.ppu.open_bus,
+            else => self.ppu.open_bus.read(),
         };
     }
 
     pub fn read(self: *Bus, addr: u16) u8 {
         if (self.ppu.dma_active and addr == 0x2007) {
-            return self.ppu.open_bus;
+            return self.ppu.open_bus.read();
         }
 
         return switch (addr) {
@@ -63,10 +63,10 @@ pub const Bus = struct {
         }
         switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF] = value,
-            0x2000...0x3FFF => {
-                const reg: u3 = @intCast(addr & 0x0007);
-                self.ppu.writeRegister(reg, value);
-            },
+            0x2000...0x3FFF => self.ppu.writeRegister(@intCast(addr & 0x0007), value),
+            //           0x6000...0x7FFF => {
+            //               std.debug.print("Ignoring write to mapper RAM at {x}\n", .{addr});
+            //           },
             0x8000...0xFFFF => {},
             else => {},
         }

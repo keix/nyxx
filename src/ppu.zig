@@ -3,6 +3,8 @@ const Bus = @import("bus.zig").Bus;
 const Cartridge = @import("cartridge.zig").Cartridge;
 const Mirroring = @import("cartridge.zig").Mirroring;
 
+const ONE_SECOND = 60;
+
 const VISIBLE_SCANLINES = 240;
 const CYCLES_PER_SCANLINE = 341;
 const SCANLINES_PER_FRAME = 262;
@@ -61,13 +63,6 @@ pub const VRAM = struct {
             0x1F, 0x2D, 0x3B, 0x0D, // Sprite Palette 3
         };
 
-        for (0..30) |row| {
-            for (0..32) |col| {
-                const index = row * 32 + col;
-                vram.memory[index] = @truncate((row + col) % 64);
-            }
-        }
-
         return vram;
     }
 
@@ -86,11 +81,6 @@ pub const VRAM = struct {
         std.debug.panic("VRAM read invalid address: 0x{X}", .{addr});
     }
 
-    pub fn readPalette(self: *VRAM, addr: u16) u8 {
-        const palette_addr = self.resolvePaletteAddr(addr);
-        return self.palette[palette_addr];
-    }
-
     pub fn write(self: *VRAM, addr: u16, value: u8) void {
         const resolved_addr = switch (addr) {
             0x3000...0x3EFF => addr - 0x1000,
@@ -100,7 +90,15 @@ pub const VRAM = struct {
         if (resolved_addr >= 0x2000 and resolved_addr < 0x3000) {
             const mirrored = self.resolveMirroredAddr(resolved_addr);
             self.memory[mirrored] = value;
+            return;
         }
+
+        std.debug.panic("VRAM write invalid address: 0x{X}", .{addr});
+    }
+
+    pub fn readPalette(self: *VRAM, addr: u16) u8 {
+        const palette_addr = self.resolvePaletteAddr(addr);
+        return self.palette[palette_addr];
     }
 
     pub fn writePalette(self: *VRAM, addr: u16, value: u8) void {
@@ -118,19 +116,19 @@ pub const VRAM = struct {
     }
 
     fn resolveMirroredAddr(self: *VRAM, addr: u16) u16 {
-        const offset = addr - 0x2000; // 0x000-0xFFF
-        const name_table_index = offset / 0x400; // 0, 1, 2, 3
-        const local_offset = offset % 0x400; // ネームテーブル内のオフセット
+        const offset = addr - 0x2000;
+        const name_table_index = offset / 0x400;
+        const local_offset = offset % 0x400;
 
         return switch (self.mirroring) {
             .Vertical => switch (name_table_index) {
-                0, 2 => local_offset, // → VRAM 0x000-0x3FF
-                1, 3 => 0x400 + local_offset, // → VRAM 0x400-0x7FF
+                0, 2 => local_offset,
+                1, 3 => 0x400 + local_offset,
                 else => std.debug.panic("Invalid name table index: {d}", .{name_table_index}),
             },
             .Horizontal => switch (name_table_index) {
-                0, 1 => local_offset, // → VRAM 0x000-0x3FF
-                2, 3 => 0x400 + local_offset, // → VRAM 0x400-0x7FF
+                0, 1 => local_offset,
+                2, 3 => 0x400 + local_offset,
                 else => std.debug.panic("Invalid name table index: {d}", .{name_table_index}),
             },
         };
@@ -158,12 +156,12 @@ const Mask = packed struct {
     emphasize_green: bool,
     emphasize_blue: bool,
 
-    pub fn write(self: *Mask, value: u8) void {
-        self.* = @bitCast(value);
-    }
-
     pub fn read(self: Mask) u8 {
         return @bitCast(self);
+    }
+
+    pub fn write(self: *Mask, value: u8) void {
+        self.* = @bitCast(value);
     }
 };
 
@@ -171,12 +169,30 @@ const Status = packed struct {
     unused: u5 = 0,
     sprite_overflow: bool,
     sprite0_hit: bool,
-    vblank: bool,
+    vblank: bool = false,
 
     pub fn read(self: *Status) u8 {
         const result: u8 = @bitCast(self.*);
         self.vblank = false;
         return result;
+    }
+};
+
+const Ctrl = packed struct {
+    nametable: u2 = 0, // 0: $2000, 1: $2400, 2: $2800, 3: $2C00
+    vram_increment: u1 = 0, // 0: increment by 1, 1: increment by 32
+    sprite_table: u1 = 0, // 0: 8x8 sprites, 1: 8x16 sprites
+    background_table: u1 = 0, // 0: $0000, 1: $1000
+    sprite_size: u1 = 0, // 0: 8x8 sprites, 1: 8x16 sprites
+    master_slave: u1 = 0, // 0: PPU is master, 1: PPU is slave
+    generate_nmi: u1 = 0, // 0: no NMI, 1: generate NMI on VBlank
+
+    pub fn read(self: Ctrl) u8 {
+        return @bitCast(self);
+    }
+
+    pub fn write(self: *Ctrl, value: u8) void {
+        self.* = @bitCast(value);
     }
 };
 
@@ -256,13 +272,69 @@ const ScrollUnit = struct {
 };
 
 const Registers = struct {
-    ctrl: u8 = 0, // $2000
+    ctrl: Ctrl = .{}, // $2000
     mask: Mask = @bitCast(@as(u8, 0)), // $2001
     status: Status = @bitCast(@as(u8, 0)), // $2002
     oam_addr: u8 = 0, // $2003
     oam_data: [256]u8 = [_]u8{0} ** 256, // $2004
     scroll_unit: ScrollUnit = .{}, // $2005 + $2006 + fine X scroll
-    // vram_buffer: u8 = 0, // $2007
+};
+
+// Open bus decay timing for each bit
+// Based on Visual 2C02 analysis: different bits decay at different rates
+const OpenBusDecay = struct {
+    data: u8 = 0,
+    // Each bit has its own decay timer (in PPU cycles)
+    // bit 7-5: ~600000 cycles (10 seconds at 60Hz)
+    // bit 4: ~300000 cycles (5 seconds)
+    // bit 3-0: ~180000 cycles (3 seconds)
+    bit_timers: [8]u32 = [_]u32{0} ** 8,
+
+    const DECAY_CYCLES_LOW = 180000; // bits 3-0
+    const DECAY_CYCLES_MID = 300000; // bit 4
+    const DECAY_CYCLES_HIGH = 600000; // bits 7-5
+
+    pub fn write(self: *OpenBusDecay, value: u8) void {
+        self.data = value;
+        // Reset all bit timers on write
+        self.bit_timers = [_]u32{0} ** 8;
+    }
+
+    pub fn read(self: *OpenBusDecay) u8 {
+        return self.data;
+    }
+
+    pub fn tick(self: *OpenBusDecay) void {
+        // Increment timers for each bit
+        for (0..8) |i| {
+            self.bit_timers[i] += 1;
+
+            // Check if bit should decay
+            const decay_threshold: u32 = if (i <= 3)
+                DECAY_CYCLES_LOW
+            else if (i == 4)
+                DECAY_CYCLES_MID
+            else
+                DECAY_CYCLES_HIGH;
+
+            if (self.bit_timers[i] >= decay_threshold) {
+                // Clear the bit
+                self.data &= ~(@as(u8, 1) << @intCast(i));
+            }
+        }
+    }
+
+    pub fn refresh_bits(self: *OpenBusDecay, value: u8, mask: u8) void {
+        // Refresh specific bits and reset their timers
+        self.data = (self.data & ~mask) | (value & mask);
+
+        // Reset timers for refreshed bits
+        for (0..8) |i| {
+            if ((mask >> @intCast(i)) & 1 == 1) {
+                self.bit_timers[i] = 0;
+            }
+        }
+    }
 };
 
 pub const PPU = struct {
@@ -271,10 +343,10 @@ pub const PPU = struct {
     _vblank_injected: bool = false,
 
     cycle: u16 = 0,
-    scanline: i16 = 0, // -1 (pre-render) 〜 260 (post-render)
+    scanline: i16 = -1, // -1 (pre-render) 〜 260 (vblank)
     frame: usize = 0,
     cartridge: *Cartridge,
-    open_bus: u8 = 0, // Open bus for PPU read operations
+    open_bus: OpenBusDecay = .{}, // Open bus with proper decay
     dma_active: bool = false,
     oam_accessing: bool = false,
     open_bus_decay_counter: u8 = 0, // Decay counter for open bus
@@ -307,7 +379,7 @@ pub const PPU = struct {
             .vram = VRAM.init(cartridge.mirroring),
             ._vblank_injected = false,
             .cycle = 0,
-            .scanline = -1, // pre-render line
+            .scanline = -1, // Start at pre-render line
             .frame = 0,
             .cartridge = cartridge,
         };
@@ -322,34 +394,33 @@ pub const PPU = struct {
             self.registers.status.vblank = true;
         }
 
-        if (self.scanline == 261 and self.cycle == 1) {
+        // Pre-render scanline (-1)
+        if (self.scanline == -1 and self.cycle == 1) {
             self.registers.status.vblank = false;
             self._vblank_injected = false;
             self.registers.status.sprite0_hit = false; // Reset sprite 0 hit flag
+            self.registers.status.sprite_overflow = false; // Reset sprite overflow flag
         }
 
         self.cycle += 1;
         if (self.cycle > 340) {
             self.cycle = 0;
             self.scanline += 1;
-            if (self.scanline > 261) {
-                self.scanline = 0;
+
+            // After scanline 260, wrap to -1 (pre-render)
+            if (self.scanline > 260) {
+                self.scanline = -1;
                 self.frame += 1;
             }
         }
 
-        if (self.scanline == 261 and self.cycle == 0) {
-            if (self.open_bus_decay_counter < 60) {
-                self.open_bus_decay_counter += 1;
-            }
-            if (self.open_bus_decay_counter >= 60) {
-                self.open_bus = 0;
-            }
-        }
+        // Tick open bus decay every cycle
+        self.open_bus.tick();
     }
 
     pub fn isFrameComplete(self: *PPU) bool {
-        return self.scanline == 0 and self.cycle == 0;
+        // Frame is complete when we transition from scanline 260 to -1
+        return self.scanline == -1 and self.cycle == 0;
     }
 
     fn renderPixel(self: *PPU, fb: *FrameBuffer) !void {
@@ -360,17 +431,20 @@ pub const PPU = struct {
 
         const tile_x = x / 8;
         const tile_y = y / 8;
-        const name_table_index = tile_y * 32 + tile_x;
-        const tile_id = self.vram.read(0x2000 + @as(u16, name_table_index));
-        // const tile_id = self.vram.memory[0x2000 + @as(u16, name_table_index)];
 
-        // const v = self.registers.scroll_unit.v.read();
-        // debugV(v);
+        // Get nametable from current vram address
+        const v = self.registers.scroll_unit.v.read();
+        const nametable_select = (v >> 10) & 0x03;
+        const nametable_base = 0x2000 + @as(u16, nametable_select) * 0x400;
+
+        const name_table_index = tile_y * 32 + tile_x;
+        const tile_id = self.vram.read(nametable_base + name_table_index);
 
         const pixel_x: u3 = @intCast(x % 8);
         const pixel_y: u3 = @intCast(y % 8);
 
-        const chr_index = @as(usize, tile_id) * 16;
+        const bg_table_addr: usize = if (self.registers.ctrl.background_table == 0) 0x0000 else 0x1000;
+        const chr_index = bg_table_addr + @as(usize, tile_id) * 16;
         const plane0 = self.cartridge.chr_rom[chr_index + pixel_y];
         const plane1 = self.cartridge.chr_rom[chr_index + 8 + pixel_y];
 
@@ -388,7 +462,9 @@ pub const PPU = struct {
 
             if (y >= sprite_y and y < sprite_y + 8 and x >= sprite_x and x < sprite_x + 8) {
                 const sprite_pixel_y: u3 = @intCast(y - sprite_y);
-                const sprite_chr_index: usize = @as(usize, sprite_tile) * 16;
+                const sprite_table_addr: usize = if (self.registers.ctrl.sprite_table == 0) 0x0000 else 0x1000;
+                const sprite_chr_index = sprite_table_addr + @as(usize, sprite_tile) * 16;
+
                 const sprite_plane0 = self.cartridge.chr_rom[sprite_chr_index + sprite_pixel_y];
                 const sprite_plane1 = self.cartridge.chr_rom[sprite_chr_index + 8 + sprite_pixel_y];
                 const sprite_bit_x: u3 = @intCast(x - sprite_x);
@@ -400,51 +476,38 @@ pub const PPU = struct {
 
                 if (sprite_color_index != 0) {
                     self.registers.status.sprite0_hit = true;
-                    // std.debug.print("Sprite 0 hit at scanline={d}, cycle={d}\n", .{ y, x + 1 });
                 }
             }
         }
 
-        const attr_table_base = 0x03C0;
-        const attr_x = tile_x / 4;
-        const attr_y = tile_y / 4;
-        const attr_index = attr_y * 8 + attr_x;
-        const attr_byte = self.vram.read(0x2000 + attr_table_base + @as(u16, attr_index));
-        // const attr_byte = self.vram.memory[attr_table_base + @as(u16, attr_index)];
+        const attr_index = (tile_y / 4) * 8 + (tile_x / 4);
+        const attr_addr = nametable_base + 0x03C0 + @as(u16, attr_index);
+        const attr_byte = self.vram.read(attr_addr);
 
         const offset_y = (tile_y % 4) / 2;
         const offset_x = (tile_x % 4) / 2;
         const shift: u3 = @intCast((offset_y * 2 + offset_x) * 2);
         const palette_number = (attr_byte >> shift) & 0b11;
 
-        // const palette_index = self.vram.palette[palette_number * 4 + color_index];
-        const palette_index = self.vram.readPalette(@as(u16, 0x3F00) + @as(u16, palette_number) * 4 + @as(u16, color_index));
+        const palette_addr: u16 = 0x3F00 + @as(u16, palette_number) * 4 + @as(u16, color_index);
+        const palette_index = self.vram.readPalette(palette_addr) & 0x3F; // Mask to 6 bits
         const color = NES_PALETTE[palette_index];
 
         fb.setPixel(@intCast(x), @intCast(y), color);
     }
 
     pub fn writeRegister(self: *PPU, reg: u3, value: u8) void {
-        self.open_bus = value;
-        self.open_bus_decay_counter = 0; // Reset decay counter on write
+        // All writes refresh the full open bus
+        self.open_bus.write(value);
+
 
         switch (reg) {
             0 => self.writeCtrl(value),
             1 => self.writeMask(value),
             2 => {}, // read-only
-            // 3 => self.writeOamAddr(value),
-            // 4 => self.writeOamData(value),
-            3 => {
-                // self.oam_accessing = true;
-                self.writeOamAddr(value);
-                // self.oam_accessing = false;
-            },
-            4 => {
-                // self.oam_accessing = true;
-                self.writeOamData(value);
-                // self.oam_accessing = false;
-            },
-            5 => self.registers.scroll_unit.writeScroll(value),
+            3 => self.writeOamAddr(value),
+            4 => self.writeOamData(value),
+            5 => self.writeScroll(value),
             6 => self.registers.scroll_unit.writeAddr(value),
             7 => self.writeData(value),
         }
@@ -452,37 +515,26 @@ pub const PPU = struct {
 
     pub fn readRegister(self: *PPU, reg: u3) u8 {
         return switch (reg) {
-            2 => {
-                // const val = self.registers.status.read();
-                // self.open_bus = val;
-                // self.registers.scroll_unit.resetLatch();
-                // return val;
-                const val = self.readStatus();
-                return val;
-            },
-            4 => {
-                const val = self.readOamData();
-                self.open_bus = val;
-                return val;
-            },
-            7 => {
-                // const val = self.readData();
-                // self.open_bus = val;
-                // return val;
-                const addr = self.registers.scroll_unit.v.read() & 0x3FFF;
-                const is_palette = addr >= 0x3F00 and addr < 0x4000;
-                const val = self.readData();
-                if (!is_palette) {
-                    self.open_bus = val;
-                }
-                return val;
-            },
-            else => self.open_bus, // Open bus for other registers
+            2 => self.readStatus(),
+            4 => self.readOamData(),
+            7 => self.readData(),
+            else => self.open_bus.read(), // Open bus for write-only registers
         };
     }
 
     fn writeCtrl(self: *PPU, value: u8) void {
-        self.registers.ctrl = value;
+        const prev_nmi_output = self.registers.ctrl.generate_nmi;
+        self.registers.ctrl.write(value);
+        self.registers.scroll_unit.t.nametable = @truncate(value & 0b0000_0011);
+        const new_nmi_output = self.registers.ctrl.generate_nmi;
+
+        if (prev_nmi_output == 0 and new_nmi_output == 1 and self.registers.status.vblank) {
+            self.registers.ctrl.generate_nmi = 1;
+        }
+
+        if (prev_nmi_output == 1 and new_nmi_output == 0) {
+            self.registers.ctrl.generate_nmi = 0;
+        }
     }
 
     fn writeMask(self: *PPU, value: u8) void {
@@ -499,29 +551,21 @@ pub const PPU = struct {
     }
 
     fn writeScroll(self: *PPU, value: u8) void {
-        self.registers.scroll.write(value);
+        self.registers.scroll_unit.writeScroll(value);
     }
 
     fn writeData(self: *PPU, value: u8) void {
         const addr = self.registers.scroll_unit.v.read() & 0x3FFF;
         if (addr < 0x2000) {
             self.cartridge.writeCHR(addr, value);
-            return; // CHR ROM/RAM write
-        }
-
-        if (addr >= 0x2000 and addr < 0x3F00) {
+            // return; // CHR ROM/RAM write
+        } else if (addr >= 0x2000 and addr < 0x3F00) {
             self.vram.write(addr, value);
         } else if (addr >= 0x3F00 and addr < 0x4000) {
             self.vram.writePalette(addr, value);
         }
 
-        if ((self.registers.ctrl >> 2) & 0b1 == 1) {
-            const new_addr = (self.registers.scroll_unit.v.read() + 32) & 0x7FFF;
-            self.registers.scroll_unit.v.write(new_addr);
-        } else {
-            const new_addr = (self.registers.scroll_unit.v.read() + 1) & 0x7FFF;
-            self.registers.scroll_unit.v.write(new_addr);
-        }
+        self.incrementVRAMAddress();
     }
 
     fn readData(self: *PPU) u8 {
@@ -529,34 +573,31 @@ pub const PPU = struct {
         var result: u8 = 0;
 
         if (addr < 0x2000) {
-            result = self.cartridge.readCHR(addr);
-            self.vram.buffer = result; // Update buffer with CHR read
-            return result; // CHR ROM/RAM read
-        }
-
-        if (addr < 0x3F00) {
+            // CHR ROM/RAM: buffered read
+            result = self.vram.buffer;
+            self.vram.buffer = self.cartridge.readCHR(addr);
+            self.open_bus.write(result); // Full refresh
+        } else if (addr < 0x3F00) {
+            // Nametable: buffered read
             result = self.vram.buffer;
             self.vram.buffer = self.vram.read(addr);
+            self.open_bus.write(result); // Full refresh
         } else if (addr < 0x4000) {
-            // result = self.vram.readPalette(addr);
-
+            // Palette: immediate read, partial refresh
             const palette = self.vram.readPalette(addr);
-            const high2 = self.open_bus & 0b1100_0000;
-            result = high2 | (palette & 0b0011_1111);
+            // Keep high 2 bits from open bus, refresh low 6 bits
+            result = (self.open_bus.read() & 0b1100_0000) | (palette & 0b0011_1111);
+            self.open_bus.refresh_bits(palette, 0b0011_1111); // Only refresh low 6 bits
         }
 
-        if ((self.registers.ctrl >> 2) & 0b1 == 1) {
-            self.registers.scroll_unit.incrementVertical();
-        } else {
-            self.registers.scroll_unit.incrementHorizontal();
-        }
-
+        self.incrementVRAMAddress();
         return result;
     }
 
     fn readStatus(self: *PPU) u8 {
-        const low5 = self.open_bus & 0b0001_1111;
         const status = self.registers.status;
+        // Keep low 5 bits from open bus
+        const low5 = self.open_bus.read() & 0b0001_1111;
         const high3: u8 =
             (@as(u8, @intFromBool(status.vblank)) << 7) |
             (@as(u8, @intFromBool(status.sprite0_hit)) << 6) |
@@ -564,34 +605,36 @@ pub const PPU = struct {
 
         const result = high3 | low5;
 
-        self.open_bus = result;
+        // Only refresh the high 3 bits
+        self.open_bus.refresh_bits(high3, 0b1110_0000);
         self.registers.scroll_unit.resetLatch();
         self.registers.status.vblank = false;
 
         return result;
     }
 
-    // fn readOamData(self: *PPU) u8 {
-    //     return self.registers.oam_data[self.registers.oam_addr];
-    // }
     fn readOamData(self: *PPU) u8 {
         const index = self.registers.oam_addr;
+        var result: u8 = 0;
 
         if (index % 4 == 2) {
-            const raw = self.registers.oam_data[index];
-            return raw & 0b1110_0011;
+            // Attribute byte: bits 2-4 are unused and read from open bus
+            const oam_data = self.registers.oam_data[index];
+            const open_bus_bits = self.open_bus.read() & 0b0001_1100;
+            result = (oam_data & 0b1110_0011) | open_bus_bits;
+            // Refresh only the bits that came from OAM
+            self.open_bus.refresh_bits(oam_data, 0b1110_0011);
+        } else {
+            result = self.registers.oam_data[index];
+            self.open_bus.write(result); // Full refresh
         }
 
-        return self.registers.oam_data[index];
+        return result;
     }
 
     fn incrementVRAMAddress(self: *PPU) void {
-        if ((self.registers.ctrl >> 2) & 0b1 == 1) {
-            const new_addr = (self.registers.scroll_unit.v.read() + 32) & 0x7FFF;
-            self.registers.scroll_unit.v.write(new_addr);
-        } else {
-            const new_addr = (self.registers.scroll_unit.v.read() + 1) & 0x7FFF;
-            self.registers.scroll_unit.v.write(new_addr);
-        }
+        const increment: u16 = if (self.registers.ctrl.vram_increment == 1) 32 else 1;
+        const new_addr = (self.registers.scroll_unit.v.read() + increment) & 0x7FFF;
+        self.registers.scroll_unit.v.write(new_addr);
     }
 };

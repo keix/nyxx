@@ -39,7 +39,7 @@ pub fn main() !void {
     try stdout.print("Starting execution...\n", .{});
     var frame_counter: usize = 0;
 
-    for (0..550) |frame_num| {
+    for (0..500) |frame_num| {
         var frame_cycles: u32 = 0;
         const target_cycles = 29780;
 
@@ -63,11 +63,6 @@ pub fn main() !void {
             try fb.writePPM(filename);
         }
 
-        // std.debug.print("Frame {}: {} cycles\n", .{ frame_num, frame_cycles });
-
-        // if (frame_counter == 100) {
-        //     bus.ppu.dumpNameTable();
-        // }
         frame_counter += 1;
     }
 }
