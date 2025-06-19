@@ -56,6 +56,21 @@ pub const Mnemonic = enum {
     TXS,
     TYA,
     // Unofficial opcodes
+    DOP,
+    TOP,
+    JAM,
+    LAX,
+    SAX,
+    ANC,
+    ALR,
+    ARR,
+    XAA,
+    AXS,
+    AHX,
+    SHY,
+    SHX,
+    TAS,
+    LAS,
     SLO,
     SRE,
     RLA,
@@ -138,7 +153,7 @@ pub const instruction_table = blk: {
     table[0x91] = .{ .mnemonic = .STA, .addressing_mode = .indirect_y, .cycles = 6 };
 
     table[0x86] = .{ .mnemonic = .STX, .addressing_mode = .zero_page, .cycles = 3 };
-    table[0x96] = .{ .mnemonic = .STX, .addressing_mode = .zero_page_x, .cycles = 4 };
+    table[0x96] = .{ .mnemonic = .STX, .addressing_mode = .zero_page_y, .cycles = 4 };
     table[0x8E] = .{ .mnemonic = .STX, .addressing_mode = .absolute, .cycles = 4 };
 
     table[0x84] = .{ .mnemonic = .STY, .addressing_mode = .zero_page, .cycles = 3 };
@@ -285,6 +300,86 @@ pub const instruction_table = blk: {
     table[0xEA] = .{ .mnemonic = .NOP, .addressing_mode = .implied, .cycles = 2 };
 
     // Unofficial opcodes
+    table[0x04] = .{ .mnemonic = .DOP, .addressing_mode = .zero_page, .cycles = 3 };
+    table[0x14] = .{ .mnemonic = .DOP, .addressing_mode = .zero_page_x, .cycles = 4 };
+    table[0x34] = .{ .mnemonic = .DOP, .addressing_mode = .zero_page_x, .cycles = 4 };
+    table[0x44] = .{ .mnemonic = .DOP, .addressing_mode = .zero_page, .cycles = 3 };
+    table[0x54] = .{ .mnemonic = .DOP, .addressing_mode = .zero_page_x, .cycles = 4 };
+    table[0x64] = .{ .mnemonic = .DOP, .addressing_mode = .zero_page, .cycles = 3 };
+    table[0x74] = .{ .mnemonic = .DOP, .addressing_mode = .zero_page_x, .cycles = 4 };
+    table[0x80] = .{ .mnemonic = .DOP, .addressing_mode = .immediate, .cycles = 2 };
+    table[0x82] = .{ .mnemonic = .DOP, .addressing_mode = .immediate, .cycles = 2 };
+    table[0x89] = .{ .mnemonic = .DOP, .addressing_mode = .immediate, .cycles = 2 };
+    table[0xC2] = .{ .mnemonic = .DOP, .addressing_mode = .immediate, .cycles = 2 };
+    table[0xD4] = .{ .mnemonic = .DOP, .addressing_mode = .zero_page_x, .cycles = 4 };
+    table[0xE2] = .{ .mnemonic = .DOP, .addressing_mode = .immediate, .cycles = 2 };
+    table[0xF4] = .{ .mnemonic = .DOP, .addressing_mode = .zero_page_x, .cycles = 4 };
+
+    table[0x1A] = .{ .mnemonic = .NOP, .addressing_mode = .implied, .cycles = 2 };
+    table[0x3A] = .{ .mnemonic = .NOP, .addressing_mode = .implied, .cycles = 2 };
+    table[0x5A] = .{ .mnemonic = .NOP, .addressing_mode = .implied, .cycles = 2 };
+    table[0x7A] = .{ .mnemonic = .NOP, .addressing_mode = .implied, .cycles = 2 };
+    table[0xDA] = .{ .mnemonic = .NOP, .addressing_mode = .implied, .cycles = 2 };
+    table[0xFA] = .{ .mnemonic = .NOP, .addressing_mode = .implied, .cycles = 2 };
+
+    table[0x0C] = .{ .mnemonic = .TOP, .addressing_mode = .absolute, .cycles = 4 };
+    table[0x1C] = .{ .mnemonic = .TOP, .addressing_mode = .absolute_x, .cycles = 4, .may_page_cross = true };
+    table[0x3C] = .{ .mnemonic = .TOP, .addressing_mode = .absolute_x, .cycles = 4, .may_page_cross = true };
+    table[0x5C] = .{ .mnemonic = .TOP, .addressing_mode = .absolute_x, .cycles = 4, .may_page_cross = true };
+    table[0x7C] = .{ .mnemonic = .TOP, .addressing_mode = .absolute_x, .cycles = 4, .may_page_cross = true };
+    table[0xDC] = .{ .mnemonic = .TOP, .addressing_mode = .absolute_x, .cycles = 4, .may_page_cross = true };
+    table[0xFC] = .{ .mnemonic = .TOP, .addressing_mode = .absolute_x, .cycles = 4, .may_page_cross = true };
+
+    table[0xA3] = .{ .mnemonic = .LAX, .addressing_mode = .indirect_x, .cycles = 6 };
+    table[0xA7] = .{ .mnemonic = .LAX, .addressing_mode = .zero_page, .cycles = 3 };
+    table[0xAB] = .{ .mnemonic = .LAX, .addressing_mode = .immediate, .cycles = 2 }; // Highly unstable
+    table[0xAF] = .{ .mnemonic = .LAX, .addressing_mode = .absolute, .cycles = 4 };
+    table[0xB3] = .{ .mnemonic = .LAX, .addressing_mode = .indirect_y, .cycles = 5, .may_page_cross = true };
+    table[0xB7] = .{ .mnemonic = .LAX, .addressing_mode = .zero_page_y, .cycles = 4 };
+    table[0xBF] = .{ .mnemonic = .LAX, .addressing_mode = .absolute_y, .cycles = 4, .may_page_cross = true };
+
+    table[0x83] = .{ .mnemonic = .SAX, .addressing_mode = .indirect_x, .cycles = 6 };
+    table[0x87] = .{ .mnemonic = .SAX, .addressing_mode = .zero_page, .cycles = 3 };
+    table[0x8F] = .{ .mnemonic = .SAX, .addressing_mode = .absolute, .cycles = 4 };
+    table[0x97] = .{ .mnemonic = .SAX, .addressing_mode = .zero_page_y, .cycles = 4 };
+
+    table[0x0B] = .{ .mnemonic = .ANC, .addressing_mode = .immediate, .cycles = 2 };
+    table[0x2B] = .{ .mnemonic = .ANC, .addressing_mode = .immediate, .cycles = 2 };
+
+    table[0x4B] = .{ .mnemonic = .ALR, .addressing_mode = .immediate, .cycles = 2 };
+
+    table[0x6B] = .{ .mnemonic = .ARR, .addressing_mode = .immediate, .cycles = 2 };
+
+    table[0xCB] = .{ .mnemonic = .AXS, .addressing_mode = .immediate, .cycles = 2 };
+
+    table[0xEB] = .{ .mnemonic = .SBC, .addressing_mode = .immediate, .cycles = 2 };
+
+    table[0x02] = .{ .mnemonic = .JAM, .addressing_mode = .implied, .cycles = 0 };
+    table[0x12] = .{ .mnemonic = .JAM, .addressing_mode = .implied, .cycles = 0 };
+    table[0x22] = .{ .mnemonic = .JAM, .addressing_mode = .implied, .cycles = 0 };
+    table[0x32] = .{ .mnemonic = .JAM, .addressing_mode = .implied, .cycles = 0 };
+    table[0x42] = .{ .mnemonic = .JAM, .addressing_mode = .implied, .cycles = 0 };
+    table[0x52] = .{ .mnemonic = .JAM, .addressing_mode = .implied, .cycles = 0 };
+    table[0x62] = .{ .mnemonic = .JAM, .addressing_mode = .implied, .cycles = 0 };
+    table[0x72] = .{ .mnemonic = .JAM, .addressing_mode = .implied, .cycles = 0 };
+    table[0x92] = .{ .mnemonic = .JAM, .addressing_mode = .implied, .cycles = 0 };
+    table[0xB2] = .{ .mnemonic = .JAM, .addressing_mode = .implied, .cycles = 0 };
+    table[0xD2] = .{ .mnemonic = .JAM, .addressing_mode = .implied, .cycles = 0 };
+    table[0xF2] = .{ .mnemonic = .JAM, .addressing_mode = .implied, .cycles = 0 };
+
+    table[0x8B] = .{ .mnemonic = .XAA, .addressing_mode = .immediate, .cycles = 2 };
+
+    table[0xBB] = .{ .mnemonic = .LAS, .addressing_mode = .absolute_y, .cycles = 4, .may_page_cross = true };
+
+    table[0x9B] = .{ .mnemonic = .TAS, .addressing_mode = .absolute_y, .cycles = 5 };
+
+    table[0x9C] = .{ .mnemonic = .SHY, .addressing_mode = .absolute_x, .cycles = 5 };
+
+    table[0x9E] = .{ .mnemonic = .SHX, .addressing_mode = .absolute_y, .cycles = 5 };
+
+    table[0x93] = .{ .mnemonic = .AHX, .addressing_mode = .indirect_y, .cycles = 6 };
+    table[0x9F] = .{ .mnemonic = .AHX, .addressing_mode = .absolute_y, .cycles = 5 };
+
     table[0x0F] = .{ .mnemonic = .SLO, .addressing_mode = .absolute, .cycles = 6 };
     table[0x1F] = .{ .mnemonic = .SLO, .addressing_mode = .absolute_x, .cycles = 7 };
     table[0x1B] = .{ .mnemonic = .SLO, .addressing_mode = .absolute_y, .cycles = 7 };
