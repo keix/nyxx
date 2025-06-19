@@ -1,17 +1,22 @@
 const PPU = @import("ppu.zig").PPU;
 const Cartridge = @import("cartridge.zig").Cartridge;
+const Controller = @import("controller.zig").Controller;
 const std = @import("std");
 
 pub const Bus = struct {
     ram: [2048]u8,
     cartridge: *Cartridge,
     ppu: PPU,
+    controller1: Controller,
+    controller2: Controller,
 
     pub fn init(cartridge: *Cartridge) Bus {
         const bus = Bus{
             .ram = [_]u8{0} ** 2048,
             .cartridge = cartridge,
             .ppu = PPU.init(cartridge),
+            .controller1 = Controller.init(),
+            .controller2 = Controller.init(),
         };
         return bus;
     }
@@ -25,14 +30,6 @@ pub const Bus = struct {
         }
     }
 
-    pub fn readForDMA(self: *Bus, addr: u16) u8 {
-        return switch (addr) {
-            0x0000...0x1FFF => self.ram[addr & 0x07FF],
-            0x8000...0xFFFF => self.cartridge.read(addr),
-            else => self.ppu.open_bus.read(),
-        };
-    }
-
     pub fn read(self: *Bus, addr: u16) u8 {
         if (self.ppu.dma_active and addr == 0x2007) {
             return self.ppu.open_bus.read();
@@ -41,6 +38,8 @@ pub const Bus = struct {
         return switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF],
             0x2000...0x3FFF => self.ppu.readRegister(@intCast(addr & 0x0007)),
+            0x4016 => self.controller1.read() | (self.ppu.open_bus.read() & 0xFE),
+            0x4017 => self.controller2.read() | (self.ppu.open_bus.read() & 0xFE),
             0x8000...0xFFFF => self.cartridge.read(addr),
             else => 0,
         };
@@ -51,9 +50,24 @@ pub const Bus = struct {
             0x0000...0x1FFF => self.ram[addr & 0x07FF] = value,
             0x2000...0x3FFF => self.ppu.writeRegister(@intCast(addr & 0x0007), value),
             0x4014 => self.performOamDma(value),
+            0x4016 => self.controllerWrite(value),
             0x8000...0xFFFF => {},
             else => {},
         }
+    }
+
+    pub fn readForDMA(self: *Bus, addr: u16) u8 {
+        return switch (addr) {
+            0x0000...0x1FFF => self.ram[addr & 0x07FF],
+            0x8000...0xFFFF => self.cartridge.read(addr),
+            else => self.ppu.open_bus.read(),
+        };
+    }
+
+    fn controllerWrite(self: *Bus, value: u8) void {
+        self.controller1.write(value);
+        self.controller2.write(value);
+        self.ppu.open_bus.write(value);
     }
 
     fn performOamDma(self: *Bus, page: u8) void {
