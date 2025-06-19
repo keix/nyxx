@@ -2,8 +2,7 @@ const std = @import("std");
 const Bus = @import("bus.zig").Bus;
 const Cartridge = @import("cartridge.zig").Cartridge;
 const Mirroring = @import("cartridge.zig").Mirroring;
-
-const ONE_SECOND = 60;
+const sdl = @import("sdl.zig");
 
 const VISIBLE_SCANLINES = 240;
 const CYCLES_PER_SCANLINE = 341;
@@ -133,17 +132,6 @@ pub const VRAM = struct {
             },
         };
     }
-};
-
-const NES_PALETTE = [_]u32{
-    0x666666, 0x002A88, 0x1412A7, 0x3B00A4, 0x5C007E, 0x6E0040, 0x6C0600, 0x561D00,
-    0x333500, 0x0B4800, 0x005200, 0x004F08, 0x00404D, 0x000000, 0x000000, 0x000000,
-    0xADADAD, 0x155FD9, 0x4240FF, 0x7527FE, 0xA01ACC, 0xB71E7B, 0xB53120, 0x994E00,
-    0x6B6D00, 0x388700, 0x0C9300, 0x008F32, 0x007C8D, 0x000000, 0x000000, 0x000000,
-    0xFFFEFF, 0x64B0FF, 0x9290FF, 0xC676FF, 0xF36AFF, 0xFE6ECC, 0xFE8170, 0xEA9E22,
-    0xBCBE00, 0x88D800, 0x5CE430, 0x45E082, 0x48CDDE, 0x4F4F4F, 0x000000, 0x000000,
-    0xFFFEFF, 0xC0DFFF, 0xD3D2FF, 0xE8C8FF, 0xFBC2FF, 0xFEC4EA, 0xFECCC5, 0xF7D8A5,
-    0xE4E594, 0xCFEF96, 0xBDF4AB, 0xB3F3CC, 0xB5EBF2, 0xB8B8B8, 0x000000, 0x000000,
 };
 
 const Mask = packed struct {
@@ -348,8 +336,6 @@ pub const PPU = struct {
     cartridge: *Cartridge,
     open_bus: OpenBusDecay = .{}, // Open bus with proper decay
     dma_active: bool = false,
-    oam_accessing: bool = false,
-    open_bus_decay_counter: u8 = 0, // Decay counter for open bus
 
     pub fn dumpNameTable(self: *PPU) void {
         const start = 0x2000;
@@ -361,16 +347,6 @@ pub const PPU = struct {
             std.debug.print("{X:02} ", .{self.vram.memory[addr]});
         }
         std.debug.print("\n", .{});
-    }
-
-    fn debugV(v: u16) void {
-        std.debug.print("PPU V register: 0x{X:04} (coarse_x={d}, coarse_y={d}, fine_y={d}, nametable={d})\n", .{
-            v,
-            v & 0x1F, // coarse_x
-            (v >> 5) & 0x1F, // coarse_y
-            (v >> 12) & 0x07, // fine_y
-            (v >> 10) & 0x03, // nametable
-        });
     }
 
     pub fn init(cartridge: *Cartridge) PPU {
@@ -400,6 +376,24 @@ pub const PPU = struct {
             self._vblank_injected = false;
             self.registers.status.sprite0_hit = false; // Reset sprite 0 hit flag
             self.registers.status.sprite_overflow = false; // Reset sprite overflow flag
+
+        }
+
+        // At cycle 280-304 of pre-render scanline, copy vertical scroll bits from t to v
+        if (self.scanline == -1 and self.cycle >= 280 and self.cycle <= 304) {
+            if (self.registers.mask.show_bg or self.registers.mask.show_sprites) {
+                // Copy vertical scroll bits: v: GHIA.BC DEF..... <- t: GHIA.BC DEF.....
+                const v = self.registers.scroll_unit.v.read();
+                const t = self.registers.scroll_unit.t.read();
+                const new_v = (v & 0x041F) | (t & 0x7BE0);
+                self.registers.scroll_unit.v.write(new_v);
+            }
+        }
+
+        // Update horizontal scroll at the end of each visible scanline
+        if (self.scanline >= 0 and self.scanline < 240 and self.cycle == 256) {
+            // This is where horizontal scroll would reset and vertical scroll would increment
+            // For now, we're using simplified rendering
         }
 
         self.cycle += 1;
@@ -423,18 +417,27 @@ pub const PPU = struct {
         return self.scanline == -1 and self.cycle == 0;
     }
 
-    fn renderPixel(self: *PPU, fb: *FrameBuffer) !void {
+    pub fn renderPixel(self: *PPU, fb: *FrameBuffer) !void {
         if (self.cartridge.chr_rom.len == 0) return;
+
+        // Don't render if PPU rendering is disabled
+        if (!self.registers.mask.show_bg and !self.registers.mask.show_sprites) return;
 
         const x: u16 = @intCast(self.cycle - 1);
         const y: u16 = @intCast(self.scanline);
 
+        // Get the current VRAM address (includes scroll information)
+        const v = self.registers.scroll_unit.v.read();
+
+        // Extract scroll position from v register
+        const v_nametable = (v >> 10) & 0x03;
+
+        // For simplified rendering, we'll use screen coordinates
         const tile_x = x / 8;
         const tile_y = y / 8;
 
         // Get nametable from current vram address
-        const v = self.registers.scroll_unit.v.read();
-        const nametable_select = (v >> 10) & 0x03;
+        const nametable_select = v_nametable;
         const nametable_base = 0x2000 + @as(u16, nametable_select) * 0x400;
 
         const name_table_index = tile_y * 32 + tile_x;
@@ -445,6 +448,10 @@ pub const PPU = struct {
 
         const bg_table_addr: usize = if (self.registers.ctrl.background_table == 0) 0x0000 else 0x1000;
         const chr_index = bg_table_addr + @as(usize, tile_id) * 16;
+
+        // Bounds check for CHR ROM access
+        if (chr_index + 8 + pixel_y >= self.cartridge.chr_rom.len) return;
+
         const plane0 = self.cartridge.chr_rom[chr_index + pixel_y];
         const plane1 = self.cartridge.chr_rom[chr_index + 8 + pixel_y];
 
@@ -464,6 +471,9 @@ pub const PPU = struct {
                 const sprite_pixel_y: u3 = @intCast(y - sprite_y);
                 const sprite_table_addr: usize = if (self.registers.ctrl.sprite_table == 0) 0x0000 else 0x1000;
                 const sprite_chr_index = sprite_table_addr + @as(usize, sprite_tile) * 16;
+
+                // Bounds check for sprite CHR ROM access
+                if (sprite_chr_index + 8 + sprite_pixel_y >= self.cartridge.chr_rom.len) return;
 
                 const sprite_plane0 = self.cartridge.chr_rom[sprite_chr_index + sprite_pixel_y];
                 const sprite_plane1 = self.cartridge.chr_rom[sprite_chr_index + 8 + sprite_pixel_y];
@@ -491,7 +501,7 @@ pub const PPU = struct {
 
         const palette_addr: u16 = 0x3F00 + @as(u16, palette_number) * 4 + @as(u16, color_index);
         const palette_index = self.vram.readPalette(palette_addr) & 0x3F; // Mask to 6 bits
-        const color = NES_PALETTE[palette_index];
+        const color = sdl.NES_PALETTE[palette_index];
 
         fb.setPixel(@intCast(x), @intCast(y), color);
     }
@@ -500,7 +510,6 @@ pub const PPU = struct {
         // All writes refresh the full open bus
         self.open_bus.write(value);
 
-
         switch (reg) {
             0 => self.writeCtrl(value),
             1 => self.writeMask(value),
@@ -508,7 +517,7 @@ pub const PPU = struct {
             3 => self.writeOamAddr(value),
             4 => self.writeOamData(value),
             5 => self.writeScroll(value),
-            6 => self.registers.scroll_unit.writeAddr(value),
+            6 => self.writeAddr(value),
             7 => self.writeData(value),
         }
     }
@@ -546,7 +555,12 @@ pub const PPU = struct {
     }
 
     pub fn writeOamData(self: *PPU, value: u8) void {
-        self.registers.oam_data[self.registers.oam_addr] = value;
+        var data = value;
+        // If writing to attribute byte (byte 2 of each sprite), clear bits 2-4
+        if (self.registers.oam_addr % 4 == 2) {
+            data &= 0b1110_0011; // Clear bits 2-4
+        }
+        self.registers.oam_data[self.registers.oam_addr] = data;
         self.registers.oam_addr +%= 1;
     }
 
@@ -554,8 +568,13 @@ pub const PPU = struct {
         self.registers.scroll_unit.writeScroll(value);
     }
 
+    fn writeAddr(self: *PPU, value: u8) void {
+        self.registers.scroll_unit.writeAddr(value);
+    }
+
     fn writeData(self: *PPU, value: u8) void {
         const addr = self.registers.scroll_unit.v.read() & 0x3FFF;
+
         if (addr < 0x2000) {
             self.cartridge.writeCHR(addr, value);
             // return; // CHR ROM/RAM write
@@ -618,12 +637,11 @@ pub const PPU = struct {
         var result: u8 = 0;
 
         if (index % 4 == 2) {
-            // Attribute byte: bits 2-4 are unused and read from open bus
+            // Attribute byte: bits 2-4 should always read as 0
             const oam_data = self.registers.oam_data[index];
-            const open_bus_bits = self.open_bus.read() & 0b0001_1100;
-            result = (oam_data & 0b1110_0011) | open_bus_bits;
-            // Refresh only the bits that came from OAM
-            self.open_bus.refresh_bits(oam_data, 0b1110_0011);
+            result = oam_data & 0b1110_0011; // Clear bits 2-4
+            // Refresh open bus with the result
+            self.open_bus.write(result);
         } else {
             result = self.registers.oam_data[index];
             self.open_bus.write(result); // Full refresh
@@ -634,7 +652,9 @@ pub const PPU = struct {
 
     fn incrementVRAMAddress(self: *PPU) void {
         const increment: u16 = if (self.registers.ctrl.vram_increment == 1) 32 else 1;
-        const new_addr = (self.registers.scroll_unit.v.read() + increment) & 0x7FFF;
+        const old_addr = self.registers.scroll_unit.v.read();
+        const new_addr = (old_addr + increment) & 0x7FFF;
+
         self.registers.scroll_unit.v.write(new_addr);
     }
 };
