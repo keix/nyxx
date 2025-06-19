@@ -2,15 +2,11 @@ const std = @import("std");
 const Bus = @import("bus.zig").Bus;
 const Cartridge = @import("cartridge.zig").Cartridge;
 const Mirroring = @import("cartridge.zig").Mirroring;
-
-const ONE_SECOND = 60;
+const sdl = @import("sdl.zig");
 
 const VISIBLE_SCANLINES = 240;
 const CYCLES_PER_SCANLINE = 341;
 const SCANLINES_PER_FRAME = 262;
-
-// Debug flag - set by PPU when frame < 3
-var debug_enabled: bool = false;
 
 pub const FrameBuffer = struct {
     pixels: [VISIBLE_SCANLINES * 256]u32 = [_]u32{0} ** (VISIBLE_SCANLINES * 256),
@@ -138,17 +134,6 @@ pub const VRAM = struct {
     }
 };
 
-const NES_PALETTE = [_]u32{
-    0x666666, 0x002A88, 0x1412A7, 0x3B00A4, 0x5C007E, 0x6E0040, 0x6C0600, 0x561D00,
-    0x333500, 0x0B4800, 0x005200, 0x004F08, 0x00404D, 0x000000, 0x000000, 0x000000,
-    0xADADAD, 0x155FD9, 0x4240FF, 0x7527FE, 0xA01ACC, 0xB71E7B, 0xB53120, 0x994E00,
-    0x6B6D00, 0x388700, 0x0C9300, 0x008F32, 0x007C8D, 0x000000, 0x000000, 0x000000,
-    0xFFFEFF, 0x64B0FF, 0x9290FF, 0xC676FF, 0xF36AFF, 0xFE6ECC, 0xFE8170, 0xEA9E22,
-    0xBCBE00, 0x88D800, 0x5CE430, 0x45E082, 0x48CDDE, 0x4F4F4F, 0x000000, 0x000000,
-    0xFFFEFF, 0xC0DFFF, 0xD3D2FF, 0xE8C8FF, 0xFBC2FF, 0xFEC4EA, 0xFECCC5, 0xF7D8A5,
-    0xE4E594, 0xCFEF96, 0xBDF4AB, 0xB3F3CC, 0xB5EBF2, 0xB8B8B8, 0x000000, 0x000000,
-};
-
 const Mask = packed struct {
     grayscale: bool,
     show_bg_left: bool,
@@ -225,16 +210,9 @@ const ScrollUnit = struct {
         if (!self.w) {
             self.t.coarse_x = @truncate(value >> 3);
             self.x = @truncate(value & 0b0000_0111);
-            // Debug: first write sets X scroll (commented out to reduce noise)
-            // std.debug.print("  ScrollUnit: First write - X scroll = {} (coarse_x = {}, fine_x = {})\n",
-            //     .{value, value >> 3, value & 0x07});
         } else {
             self.t.coarse_y = @truncate(value >> 3);
             self.t.fine_y = @truncate(value & 0b0000_0111);
-            // Debug: second write sets Y scroll
-            if (debug_enabled) {
-                std.debug.print("  ScrollUnit: Second write - Y scroll = {} (coarse_y = {}, fine_y = {})\n", .{ value, value >> 3, value & 0x07 });
-            }
         }
         self.w = !self.w;
     }
@@ -243,16 +221,10 @@ const ScrollUnit = struct {
         if (!self.w) {
             const current = self.t.read() & 0x00FF;
             self.t.write((@as(u16, value & 0x3F) << 8) | current);
-            if (debug_enabled) {
-                std.debug.print("  ScrollUnit: PPUADDR first write = 0x{x:0>2}, t = 0x{x:0>4}\n", .{ value, self.t.read() });
-            }
         } else {
             const current = self.t.read() & 0x7F00;
             self.t.write(current | value);
             self.v = self.t;
-            if (debug_enabled) {
-                std.debug.print("  ScrollUnit: PPUADDR second write = 0x{x:0>2}, v = t = 0x{x:0>4}\n", .{ value, self.v.read() });
-            }
         }
         self.w = !self.w;
     }
@@ -364,8 +336,6 @@ pub const PPU = struct {
     cartridge: *Cartridge,
     open_bus: OpenBusDecay = .{}, // Open bus with proper decay
     dma_active: bool = false,
-    oam_accessing: bool = false,
-    open_bus_decay_counter: u8 = 0, // Decay counter for open bus
 
     pub fn dumpNameTable(self: *PPU) void {
         const start = 0x2000;
@@ -377,16 +347,6 @@ pub const PPU = struct {
             std.debug.print("{X:02} ", .{self.vram.memory[addr]});
         }
         std.debug.print("\n", .{});
-    }
-
-    fn debugV(v: u16) void {
-        std.debug.print("PPU V register: 0x{X:04} (coarse_x={d}, coarse_y={d}, fine_y={d}, nametable={d})\n", .{
-            v,
-            v & 0x1F, // coarse_x
-            (v >> 5) & 0x1F, // coarse_y
-            (v >> 12) & 0x07, // fine_y
-            (v >> 10) & 0x03, // nametable
-        });
     }
 
     pub fn init(cartridge: *Cartridge) PPU {
@@ -402,19 +362,12 @@ pub const PPU = struct {
     }
 
     pub fn step(self: *PPU, fb: *FrameBuffer) !void {
-        // Update debug flag
-        debug_enabled = self.frame < 10;
-
         if (self.scanline >= 0 and self.scanline < 240 and self.cycle >= 1 and self.cycle <= 256) {
             try self.renderPixel(fb);
         }
 
         if (self.scanline == 241 and self.cycle == 1) {
             self.registers.status.vblank = true;
-            // Debug: print rendering info at VBlank
-            if (debug_enabled) {
-                std.debug.print("Frame {}: VBlank at scanline {}, v register: 0x{x:0>4}\n", .{ self.frame, self.scanline, self.registers.scroll_unit.v.read() });
-            }
         }
 
         // Pre-render scanline (-1)
@@ -424,34 +377,16 @@ pub const PPU = struct {
             self.registers.status.sprite0_hit = false; // Reset sprite 0 hit flag
             self.registers.status.sprite_overflow = false; // Reset sprite overflow flag
 
-            // Debug: check v register at start of frame
-            if (debug_enabled) {
-                std.debug.print("Frame {}: Pre-render scanline, v = 0x{x:0>4}, t = 0x{x:0>4}\n", .{ self.frame, self.registers.scroll_unit.v.read(), self.registers.scroll_unit.t.read() });
-            }
-        }
-
-        // Debug: track pre-render scanline cycles
-        if (debug_enabled and self.scanline == -1 and (self.cycle == 1 or self.cycle == 280 or self.cycle == 340)) {
-            std.debug.print("Frame {}: Pre-render scanline cycle {}\n", .{ self.frame, self.cycle });
         }
 
         // At cycle 280-304 of pre-render scanline, copy vertical scroll bits from t to v
         if (self.scanline == -1 and self.cycle >= 280 and self.cycle <= 304) {
-            // Debug: check mask settings
-            if (debug_enabled and self.cycle == 280) {
-                std.debug.print("Frame {}: Mask - show_bg={}, show_sprites={}\n", .{ self.frame, self.registers.mask.show_bg, self.registers.mask.show_sprites });
-            }
-
             if (self.registers.mask.show_bg or self.registers.mask.show_sprites) {
                 // Copy vertical scroll bits: v: GHIA.BC DEF..... <- t: GHIA.BC DEF.....
                 const v = self.registers.scroll_unit.v.read();
                 const t = self.registers.scroll_unit.t.read();
                 const new_v = (v & 0x041F) | (t & 0x7BE0);
                 self.registers.scroll_unit.v.write(new_v);
-
-                if (debug_enabled and self.cycle == 280) {
-                    std.debug.print("Frame {}: Copying vertical scroll from t to v: 0x{x:0>4} -> 0x{x:0>4}\n", .{ self.frame, v, new_v });
-                }
             }
         }
 
@@ -491,60 +426,22 @@ pub const PPU = struct {
         const x: u16 = @intCast(self.cycle - 1);
         const y: u16 = @intCast(self.scanline);
 
-        // Debug: track rendering progress at multiple points
-        if (debug_enabled and x == 0) {
-            if (y == 0) {
-                std.debug.print("Frame {}: Rendering top of screen (y=0), mask.show_bg={}\n", .{ self.frame, self.registers.mask.show_bg });
-            } else if (y == 60) {
-                std.debug.print("Frame {}: Rendering upper quarter (y=60)\n", .{self.frame});
-            } else if (y == 119) {
-                std.debug.print("Frame {}: Rendering middle of screen (y=119)\n", .{self.frame});
-            } else if (y == 180) {
-                std.debug.print("Frame {}: Rendering lower quarter (y=180)\n", .{self.frame});
-            } else if (y == 239) {
-                std.debug.print("Frame {}: Rendering bottom of screen (y=239)\n", .{self.frame});
-            }
-        }
-
         // Get the current VRAM address (includes scroll information)
         const v = self.registers.scroll_unit.v.read();
 
         // Extract scroll position from v register
-        const v_coarse_x = v & 0x1F;
-        const v_coarse_y = (v >> 5) & 0x1F;
-        const v_fine_y = (v >> 12) & 0x07;
         const v_nametable = (v >> 10) & 0x03;
 
-        // Calculate effective tile position with scroll
-        const scroll_x = v_coarse_x * 8 + self.registers.scroll_unit.x;
-        const scroll_y = v_coarse_y * 8 + v_fine_y;
-
-        // For simplified rendering, we'll still use screen coordinates
-        // but show what the scroll offset would be
+        // For simplified rendering, we'll use screen coordinates
         const tile_x = x / 8;
         const tile_y = y / 8;
-
-        // Debug: show scroll offset on first scanline
-        if (debug_enabled and x == 0 and y == 0) {
-            std.debug.print("Frame {}: Scroll offset = ({}, {}), v_nametable={}\n", .{ self.frame, scroll_x, scroll_y, v_nametable });
-        }
 
         // Get nametable from current vram address
         const nametable_select = v_nametable;
         const nametable_base = 0x2000 + @as(u16, nametable_select) * 0x400;
 
-        // Debug: track which nametable is being used
-        if (debug_enabled and y == 0 and x == 0) {
-            std.debug.print("Frame {} Scanline 0: Using nametable {} (v=0x{x:0>4})\n", .{ self.frame, nametable_select, v });
-        }
-
         const name_table_index = tile_y * 32 + tile_x;
         const tile_id = self.vram.read(nametable_base + name_table_index);
-
-        // Debug: check tile IDs for upper screen
-        if (debug_enabled and x == 0 and y < 120 and (y % 8) == 0) {
-            std.debug.print("Frame {} y={}: tile_x={}, tile_y={}, nametable={}, tile_id=0x{x:0>2}\n", .{ self.frame, y, tile_x, tile_y, nametable_select, tile_id });
-        }
 
         const pixel_x: u3 = @intCast(x % 8);
         const pixel_y: u3 = @intCast(y % 8);
@@ -604,7 +501,7 @@ pub const PPU = struct {
 
         const palette_addr: u16 = 0x3F00 + @as(u16, palette_number) * 4 + @as(u16, color_index);
         const palette_index = self.vram.readPalette(palette_addr) & 0x3F; // Mask to 6 bits
-        const color = NES_PALETTE[palette_index];
+        const color = sdl.NES_PALETTE[palette_index];
 
         fb.setPixel(@intCast(x), @intCast(y), color);
     }
@@ -612,17 +509,6 @@ pub const PPU = struct {
     pub fn writeRegister(self: *PPU, reg: u3, value: u8) void {
         // All writes refresh the full open bus
         self.open_bus.write(value);
-
-        // Debug logging for important registers
-        if (debug_enabled) {
-            switch (reg) {
-                0 => std.debug.print("Frame {} Scanline {}: Write to $2000 (PPUCTRL) = 0x{x:0>2}\n", .{ self.frame, self.scanline, value }),
-                1 => std.debug.print("Frame {} Scanline {}: Write to $2001 (PPUMASK) = 0x{x:0>2}\n", .{ self.frame, self.scanline, value }),
-                5 => std.debug.print("Frame {} Scanline {}: Write to $2005 (PPUSCROLL) = 0x{x:0>2}\n", .{ self.frame, self.scanline, value }),
-                6 => std.debug.print("Frame {} Scanline {}: Write to $2006 (PPUADDR) = 0x{x:0>2}\n", .{ self.frame, self.scanline, value }),
-                else => {},
-            }
-        }
 
         switch (reg) {
             0 => self.writeCtrl(value),
@@ -661,18 +547,7 @@ pub const PPU = struct {
     }
 
     fn writeMask(self: *PPU, value: u8) void {
-        const old_show_bg = self.registers.mask.show_bg;
-        const old_show_sprites = self.registers.mask.show_sprites;
         self.registers.mask.write(value);
-
-        // Debug: track when rendering is enabled/disabled
-        if (debug_enabled) {
-            const new_show_bg = self.registers.mask.show_bg;
-            const new_show_sprites = self.registers.mask.show_sprites;
-            if (old_show_bg != new_show_bg or old_show_sprites != new_show_sprites) {
-                std.debug.print("Frame {} Scanline {}: PPU rendering changed - bg: {} -> {}, sprites: {} -> {}\n", .{ self.frame, self.scanline, old_show_bg, new_show_bg, old_show_sprites, new_show_sprites });
-            }
-        }
     }
 
     fn writeOamAddr(self: *PPU, value: u8) void {
@@ -680,7 +555,12 @@ pub const PPU = struct {
     }
 
     pub fn writeOamData(self: *PPU, value: u8) void {
-        self.registers.oam_data[self.registers.oam_addr] = value;
+        var data = value;
+        // If writing to attribute byte (byte 2 of each sprite), clear bits 2-4
+        if (self.registers.oam_addr % 4 == 2) {
+            data &= 0b1110_0011; // Clear bits 2-4
+        }
+        self.registers.oam_data[self.registers.oam_addr] = data;
         self.registers.oam_addr +%= 1;
     }
 
@@ -690,20 +570,10 @@ pub const PPU = struct {
 
     fn writeAddr(self: *PPU, value: u8) void {
         self.registers.scroll_unit.writeAddr(value);
-
-        // Debug: track PPUADDR writes
-        if (debug_enabled) {
-            std.debug.print("Frame {} Scanline {}: Write to PPUADDR = 0x{x:0>2}, v = 0x{x:0>4}\n", .{ self.frame, self.scanline, value, self.registers.scroll_unit.v.read() });
-        }
     }
 
     fn writeData(self: *PPU, value: u8) void {
         const addr = self.registers.scroll_unit.v.read() & 0x3FFF;
-
-        // Debug: track VRAM writes
-        if (debug_enabled and addr >= 0x2000 and addr < 0x2400) {
-            std.debug.print("Frame {} Scanline {}: Write to VRAM[0x{x:0>4}] = 0x{x:0>2}\n", .{ self.frame, self.scanline, addr, value });
-        }
 
         if (addr < 0x2000) {
             self.cartridge.writeCHR(addr, value);
@@ -720,11 +590,6 @@ pub const PPU = struct {
     fn readData(self: *PPU) u8 {
         const addr = self.registers.scroll_unit.v.read() & 0x3FFF;
         var result: u8 = 0;
-
-        // Debug: track PPU reads during rendering
-        if (debug_enabled and self.scanline >= 0 and self.scanline < 240) {
-            std.debug.print("Frame {} Scanline {}: readData from 0x{x:0>4}\n", .{ self.frame, self.scanline, addr });
-        }
 
         if (addr < 0x2000) {
             // CHR ROM/RAM: buffered read
@@ -772,12 +637,11 @@ pub const PPU = struct {
         var result: u8 = 0;
 
         if (index % 4 == 2) {
-            // Attribute byte: bits 2-4 are unused and read from open bus
+            // Attribute byte: bits 2-4 should always read as 0
             const oam_data = self.registers.oam_data[index];
-            const open_bus_bits = self.open_bus.read() & 0b0001_1100;
-            result = (oam_data & 0b1110_0011) | open_bus_bits;
-            // Refresh only the bits that came from OAM
-            self.open_bus.refresh_bits(oam_data, 0b1110_0011);
+            result = oam_data & 0b1110_0011; // Clear bits 2-4
+            // Refresh open bus with the result
+            self.open_bus.write(result);
         } else {
             result = self.registers.oam_data[index];
             self.open_bus.write(result); // Full refresh
@@ -790,11 +654,6 @@ pub const PPU = struct {
         const increment: u16 = if (self.registers.ctrl.vram_increment == 1) 32 else 1;
         const old_addr = self.registers.scroll_unit.v.read();
         const new_addr = (old_addr + increment) & 0x7FFF;
-
-        // Debug: track v register changes during rendering
-        if (debug_enabled and self.scanline >= 0 and self.scanline < 240) {
-            std.debug.print("Frame {} Scanline {}: incrementVRAMAddress: 0x{x:0>4} -> 0x{x:0>4} (increment={})\n", .{ self.frame, self.scanline, old_addr, new_addr, increment });
-        }
 
         self.registers.scroll_unit.v.write(new_addr);
     }

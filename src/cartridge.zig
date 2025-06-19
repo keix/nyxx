@@ -65,7 +65,7 @@ pub const Cartridge = struct {
 
         const tile_index: usize = 0x24;
         const start = tile_index * 16;
-        std.debug.print("CHR pattern for tile 0x24 (at offset 0x{X:04}):\n", .{start});
+
         var i: usize = 0;
         while (i < 16) : (i += 1) {
             if (chr_rom.len > 0)
@@ -73,7 +73,6 @@ pub const Cartridge = struct {
         }
 
         if (chr_rom.len > start + 15) {
-            std.debug.print("\n=== Debug: CHR pattern for tile 0x{X:02} at offset 0x{X:04} ===\n", .{ tile_index, start });
             for (0..8) |row| {
                 const plane0 = chr_rom[start + row];
                 const plane1 = chr_rom[start + 8 + row];
