@@ -117,8 +117,8 @@ pub const CPU = struct {
         // Push PC low byte
         self.push(@intCast(self.registers.pc & 0xFF));
 
-        // Push status with break flag clear
-        const status = self.registers.flags.toByte() & ~@as(u8, 0x10); // Clear B flag
+        // Push status with break flag clear (bit 5 is already set by toByte())
+        const status = self.registers.flags.toByte(); // B flag is already false
         self.push(status);
 
         // Set interrupt disable flag
@@ -190,6 +190,21 @@ pub const CPU = struct {
             .BRK => self.opBrk(),
 
             // Unofficial opcodes
+            .DOP => self.opDop(instr.addressing_mode),
+            .TOP => self.opTop(instr.addressing_mode),
+            .JAM => self.opJam(),
+            .LAX => self.opLax(instr.addressing_mode),
+            .SAX => self.opSax(instr.addressing_mode),
+            .ANC => self.opAnc(instr.addressing_mode),
+            .ALR => self.opAlr(instr.addressing_mode),
+            .ARR => self.opArr(instr.addressing_mode),
+            .AXS => self.opAxs(instr.addressing_mode),
+            .XAA => self.opXaa(instr.addressing_mode),
+            .LAS => self.opLas(instr.addressing_mode),
+            .TAS => self.opTas(instr.addressing_mode),
+            .SHY => self.opShy(instr.addressing_mode),
+            .SHX => self.opShx(instr.addressing_mode),
+            .AHX => self.opAhx(instr.addressing_mode),
             .SLO => self.opSlo(instr.addressing_mode),
             .SRE => self.opSre(instr.addressing_mode),
             .RLA => self.opRla(instr.addressing_mode),
@@ -400,7 +415,7 @@ pub const CPU = struct {
     }
 
     inline fn getZeroPageY(self: *CPU) u16 {
-        return @as(u16, (self.fetchU8() + self.registers.y) & 0xFF);
+        return @as(u16, (self.fetchU8() +% self.registers.y) & 0xFF);
     }
 
     inline fn getAbsolute(self: *CPU) u16 {
@@ -584,8 +599,7 @@ pub const CPU = struct {
     }
 
     inline fn opPhp(self: *CPU) void {
-        var flags = self.registers.flags.toByte();
-        flags |= 0b00110000;
+        const flags = self.registers.flags.toByte() | 0x10; // Set B flag
         self.push(flags);
     }
 
@@ -748,7 +762,7 @@ pub const CPU = struct {
         const result: u8 = sum2[0];
 
         self.registers.flags.c = @as(u16, self.registers.a) + @as(u16, value) + carry > 0xFF;
-        self.registers.flags.v = ((self.registers.a ^ result) & (original_value ^ result) & 0x80) != 0;
+        self.registers.flags.v = ((self.registers.a ^ result) & (self.registers.a ^ original_value) & 0x80) != 0;
 
         self.registers.a = result;
         self.updateZN(result);
@@ -821,7 +835,7 @@ pub const CPU = struct {
         self.push(@as(u8, @truncate(return_addr >> 8)));
         self.push(@as(u8, @truncate(return_addr & 0xFF)));
 
-        const flags = self.registers.flags.toByte() | 0b00110000;
+        const flags = self.registers.flags.toByte() | 0x10; // Set B flag for BRK
         self.push(flags);
 
         self.registers.flags.i = true;
@@ -832,6 +846,132 @@ pub const CPU = struct {
     }
 
     // Unofficial opcodes
+    fn opDop(self: *CPU, mode: Opcode.AddressingMode) void {
+        // DOP (Double NOP) - Read operand and discard
+        _ = self.readFrom(mode);
+    }
+
+    fn opTop(self: *CPU, mode: Opcode.AddressingMode) void {
+        // TOP (Triple NOP) - Read operand and discard
+        _ = self.readFrom(mode);
+    }
+
+    fn opJam(self: *CPU) void {
+        // JAM/KIL - Halt the CPU by decrementing PC to create infinite loop
+        self.registers.pc -%= 1;
+    }
+
+    fn opLax(self: *CPU, mode: Opcode.AddressingMode) void {
+        // LAX - Load A and X with same value
+        const value = self.readFrom(mode);
+        self.registers.a = value;
+        self.registers.x = value;
+        self.updateZN(value);
+    }
+
+    fn opSax(self: *CPU, mode: Opcode.AddressingMode) void {
+        // SAX - Store A & X
+        const value = self.registers.a & self.registers.x;
+        self.writeTo(mode, value);
+    }
+
+    fn opAnc(self: *CPU, mode: Opcode.AddressingMode) void {
+        // ANC - AND immediate, then copy N to C
+        const value = self.readFrom(mode);
+        self.registers.a &= value;
+        self.updateZN(self.registers.a);
+        self.registers.flags.c = self.registers.flags.n;
+    }
+
+    fn opAlr(self: *CPU, mode: Opcode.AddressingMode) void {
+        // ALR - AND then LSR
+        const value = self.readFrom(mode);
+        self.registers.a &= value;
+        // Perform LSR on A
+        self.registers.flags.c = (self.registers.a & 0x01) != 0;
+        self.registers.a >>= 1;
+        self.updateZN(self.registers.a);
+    }
+
+    fn opArr(self: *CPU, mode: Opcode.AddressingMode) void {
+        // ARR - AND then ROR, with weird flag behavior
+        const value = self.readFrom(mode);
+        self.registers.a &= value;
+        // Perform ROR
+        const carry_in = @as(u8, @intFromBool(self.registers.flags.c)) << 7;
+        const result = (self.registers.a >> 1) | carry_in;
+        self.registers.a = result;
+        self.updateZN(result);
+        // Special flag handling
+        self.registers.flags.c = (result & 0x40) != 0;
+        self.registers.flags.v = ((result & 0x40) ^ ((result & 0x20) << 1)) != 0;
+    }
+
+    fn opAxs(self: *CPU, mode: Opcode.AddressingMode) void {
+        // AXS - (A & X) - value, result in X
+        const value = self.readFrom(mode);
+        const and_result = self.registers.a & self.registers.x;
+        const result = and_result -% value;
+        self.registers.x = result;
+        self.updateZN(result);
+        self.registers.flags.c = and_result >= value;
+    }
+
+    fn opXaa(self: *CPU, mode: Opcode.AddressingMode) void {
+        // XAA - TXA + AND (unstable)
+        self.registers.a = self.registers.x;
+        const value = self.readFrom(mode);
+        self.registers.a &= value;
+        self.updateZN(self.registers.a);
+    }
+
+    fn opLas(self: *CPU, mode: Opcode.AddressingMode) void {
+        // LAS - LDA + TSX (AND with SP)
+        const value = self.readFrom(mode);
+        const result = value & self.registers.s;
+        self.registers.a = result;
+        self.registers.x = result;
+        self.registers.s = result;
+        self.updateZN(result);
+    }
+
+    fn opTas(self: *CPU, mode: Opcode.AddressingMode) void {
+        // TAS - Store A & X in S, then store A & X & H+1
+        self.registers.s = self.registers.a & self.registers.x;
+        const addr = self.getAddress(mode);
+        const high_byte_plus_one: u8 = @truncate((addr >> 8) + 1);
+        const value = self.registers.a & self.registers.x & high_byte_plus_one;
+        self.writeMemory(addr, value);
+    }
+
+    fn opShy(self: *CPU, mode: Opcode.AddressingMode) void {
+        // SHY - Store Y & H+1
+        _ = mode;
+        const base = self.fetchU16();
+        const addr = base +% @as(u16, self.registers.x);
+        const high_byte_plus_one: u8 = @truncate((addr >> 8) + 1);
+        const value = self.registers.y & high_byte_plus_one;
+        self.writeMemory(addr, value);
+    }
+
+    fn opShx(self: *CPU, mode: Opcode.AddressingMode) void {
+        // SHX - Store X & H+1
+        _ = mode;
+        const base = self.fetchU16();
+        const addr = base +% @as(u16, self.registers.y);
+        const high_byte_plus_one: u8 = @truncate((addr >> 8) + 1);
+        const value = self.registers.x & high_byte_plus_one;
+        self.writeMemory(addr, value);
+    }
+
+    fn opAhx(self: *CPU, mode: Opcode.AddressingMode) void {
+        // AHX - Store A & X & H+1
+        const addr = self.getAddress(mode);
+        const high_byte_plus_one: u8 = @truncate((addr >> 8) + 1);
+        const value = self.registers.a & self.registers.x & high_byte_plus_one;
+        self.writeMemory(addr, value);
+    }
+
     fn opSlo(self: *CPU, mode: Opcode.AddressingMode) void {
         const addr = self.getAddressForRMW(mode);
         const value = self.readMemory(addr);

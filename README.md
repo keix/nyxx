@@ -14,6 +14,7 @@ This project was developed and tested under the following environment:
 - Gentoo Linux 6.12.21
 - LLVM version 19.1.3
 - Zig version 0.14.0 (self-hosted from stage3)
+- SDL version 2.32.2 (libsdl2)
 
 ## Documentation
 Explore detailed docs and implementation notes on Notion:
