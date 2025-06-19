@@ -3897,7 +3897,7 @@ test "ScrollUnit writeScroll and writeAddr behavior" {
     const allocator = std.testing.allocator;
     var cartridge = try buildTestRom(allocator, &.{}, 0x8000);
     defer cartridge.deinit(allocator);
-    
+
     var ppu = PPU.init(&cartridge);
     ppu.writeRegister(5, 0b0010_0101); // coarse_x = 4, x = 5
     try std.testing.expect(ppu.registers.scroll_unit.t.coarse_x == 4);
@@ -3923,7 +3923,7 @@ test "ScrollUnit incrementHorizontal wraps correctly" {
     const allocator = std.testing.allocator;
     var cartridge = try buildTestRom(allocator, &.{}, 0x8000);
     defer cartridge.deinit(allocator);
-    
+
     var ppu = PPU.init(&cartridge);
     // ppu.writeRegister(5, 0b11111000); // binary: 11111 000 → coarse_x=31, x=0
     ppu.registers.scroll_unit.v.coarse_x = 31;

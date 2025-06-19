@@ -50,6 +50,7 @@ pub const SDL = struct {
     renderer: ?*c.SDL_Renderer,
     texture: ?*c.SDL_Texture,
     scale: u8,
+    input_state: InputState = .{},
 
     pub fn init(title: []const u8, scale: u8) !SDL {
         // Use dummy driver if headless
@@ -147,40 +148,38 @@ pub const SDL = struct {
     }
 
     pub fn pollInput(self: *SDL) ?InputState {
-        _ = self;
-        var state = InputState{};
         var event: c.SDL_Event = undefined;
 
         while (c.SDL_PollEvent(&event) != 0) {
             switch (event.type) {
-                c.SDL_QUIT => state.quit = true,
+                c.SDL_QUIT => self.input_state.quit = true,
                 c.SDL_KEYDOWN => {
                     switch (event.key.keysym.sym) {
                         // Controller 1 mapping
-                        c.SDLK_z => state.controller1.a = true,
-                        c.SDLK_x => state.controller1.b = true,
-                        c.SDLK_SPACE => state.controller1.select = true,
-                        c.SDLK_RETURN => state.controller1.start = true,
-                        c.SDLK_UP => state.controller1.up = true,
-                        c.SDLK_DOWN => state.controller1.down = true,
-                        c.SDLK_LEFT => state.controller1.left = true,
-                        c.SDLK_RIGHT => state.controller1.right = true,
+                        c.SDLK_z => self.input_state.controller1.a = true,
+                        c.SDLK_x => self.input_state.controller1.b = true,
+                        c.SDLK_SPACE => self.input_state.controller1.select = true,
+                        c.SDLK_RETURN => self.input_state.controller1.start = true,
+                        c.SDLK_UP => self.input_state.controller1.up = true,
+                        c.SDLK_DOWN => self.input_state.controller1.down = true,
+                        c.SDLK_LEFT => self.input_state.controller1.left = true,
+                        c.SDLK_RIGHT => self.input_state.controller1.right = true,
                         // ESC to quit
-                        c.SDLK_ESCAPE => state.quit = true,
+                        c.SDLK_ESCAPE => self.input_state.quit = true,
                         else => {},
                     }
                 },
                 c.SDL_KEYUP => {
                     switch (event.key.keysym.sym) {
                         // Controller 1 mapping
-                        c.SDLK_z => state.controller1.a = false,
-                        c.SDLK_x => state.controller1.b = false,
-                        c.SDLK_SPACE => state.controller1.select = false,
-                        c.SDLK_RETURN => state.controller1.start = false,
-                        c.SDLK_UP => state.controller1.up = false,
-                        c.SDLK_DOWN => state.controller1.down = false,
-                        c.SDLK_LEFT => state.controller1.left = false,
-                        c.SDLK_RIGHT => state.controller1.right = false,
+                        c.SDLK_z => self.input_state.controller1.a = false,
+                        c.SDLK_x => self.input_state.controller1.b = false,
+                        c.SDLK_SPACE => self.input_state.controller1.select = false,
+                        c.SDLK_RETURN => self.input_state.controller1.start = false,
+                        c.SDLK_UP => self.input_state.controller1.up = false,
+                        c.SDLK_DOWN => self.input_state.controller1.down = false,
+                        c.SDLK_LEFT => self.input_state.controller1.left = false,
+                        c.SDLK_RIGHT => self.input_state.controller1.right = false,
                         else => {},
                     }
                 },
@@ -188,6 +187,6 @@ pub const SDL = struct {
             }
         }
 
-        return state;
+        return self.input_state;
     }
 };

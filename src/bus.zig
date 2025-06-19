@@ -38,8 +38,8 @@ pub const Bus = struct {
         return switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF],
             0x2000...0x3FFF => self.ppu.readRegister(@intCast(addr & 0x0007)),
-            0x4016 => self.controller1.read() | (self.ppu.open_bus.read() & 0xFE),
-            0x4017 => self.controller2.read() | (self.ppu.open_bus.read() & 0xFE),
+            0x4016 => self.controller1.read() | (self.ppu.open_bus.read() & 0xE0),
+            0x4017 => self.controller2.read() | (self.ppu.open_bus.read() & 0xE0),
             0x8000...0xFFFF => self.cartridge.read(addr),
             else => 0,
         };

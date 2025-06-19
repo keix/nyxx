@@ -16,6 +16,14 @@ This project was developed and tested under the following environment:
 - Zig version 0.14.0 (self-hosted from stage3)
 - SDL version 2.32.2 (libsdl2)
 
+## Build & Run
+Nyxx is built with Zig. To compile and run it manually:
+
+```bash
+zig build
+./zig-out/bin/nyxx path/to/rom.nes
+```
+
 ## Documentation
 Explore detailed docs and implementation notes on Notion:
 [Project Nyxx](https://6502.notion.site/)
