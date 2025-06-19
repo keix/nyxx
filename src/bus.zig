@@ -40,35 +40,29 @@ pub const Bus = struct {
 
         return switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF],
-            0x2000...0x3FFF => {
-                const reg: u3 = @intCast(addr & 0x0007);
-                return self.ppu.readRegister(reg);
-            },
+            0x2000...0x3FFF => self.ppu.readRegister(@intCast(addr & 0x0007)),
             0x8000...0xFFFF => self.cartridge.read(addr),
             else => 0,
         };
     }
 
     pub fn write(self: *Bus, addr: u16, value: u8) void {
-        if (addr == 0x4014) {
-            self.ppu.dma_active = true;
-            const base = @as(u16, value) << 8;
-            var i: u16 = 0;
-            while (i < 256) : (i += 1) {
-                const data = self.readForDMA(base + i);
-                self.ppu.writeOamData(data);
-            }
-            self.ppu.dma_active = false;
-            return;
-        }
         switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF] = value,
             0x2000...0x3FFF => self.ppu.writeRegister(@intCast(addr & 0x0007), value),
-            //           0x6000...0x7FFF => {
-            //               std.debug.print("Ignoring write to mapper RAM at {x}\n", .{addr});
-            //           },
+            0x4014 => self.performOamDma(value),
             0x8000...0xFFFF => {},
             else => {},
         }
+    }
+
+    fn performOamDma(self: *Bus, page: u8) void {
+        self.ppu.dma_active = true;
+        const base = @as(u16, page) << 8;
+        for (0..256) |i| {
+            const data = self.readForDMA(base + @as(u16, @intCast(i)));
+            self.ppu.writeOamData(data);
+        }
+        self.ppu.dma_active = false;
     }
 };

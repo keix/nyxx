@@ -3,6 +3,7 @@ const Bus = @import("bus.zig").Bus;
 const CPU = @import("6502.zig").CPU;
 const Cart = @import("cartridge.zig").Cartridge;
 const FrameBuffer = @import("ppu.zig").FrameBuffer;
+const SDL = @import("sdl.zig").SDL;
 
 pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
@@ -34,35 +35,47 @@ pub fn main() !void {
 
     try stdout.print("Initial PC: 0x{X:0>4}\n", .{cpu.registers.pc});
 
+    // Initialize SDL
+    var sdl = try SDL.init("Nyxx NES Emulator", 2);
+    defer sdl.deinit();
+
     var fb = FrameBuffer{};
 
     try stdout.print("Starting execution...\n", .{});
-    var frame_counter: usize = 0;
 
-    for (0..500) |frame_num| {
-        var frame_cycles: u32 = 0;
-        const target_cycles = 29780;
+    // Main emulation loop
+    var running = true;
+    var frame_cycles: u32 = 0;
+    const target_cycles = 29780;
 
-        while (frame_cycles < target_cycles) {
-            const cycles = cpu.step();
-            frame_cycles += cycles;
+    while (running) {
+        // Execute CPU instruction
+        const cycles = cpu.step();
+        frame_cycles += cycles;
 
-            for (0..(cycles * 3)) |_| {
-                try bus.ppu.step(&fb);
-            }
-
-            if (bus.ppu.registers.status.vblank and !bus.ppu._vblank_injected) {
-                bus.ppu._vblank_injected = true;
-                break;
-            }
+        // Execute PPU cycles (3 PPU cycles per CPU cycle)
+        for (0..(cycles * 3)) |_| {
+            try bus.ppu.step(&fb);
         }
 
-        if (frame_num % 10 == 0) {
-            const filename = try std.fmt.allocPrint(allocator, "test-results/framebuffer_{d:0>2}.ppm", .{frame_num});
-            defer allocator.free(filename);
-            try fb.writePPM(filename);
-        }
+        // Check if frame is complete
+        if (frame_cycles >= target_cycles) {
+            frame_cycles -= target_cycles;
 
-        frame_counter += 1;
+            // Render frame to SDL
+            try sdl.renderFrame(&fb);
+
+            // Poll for input
+            if (sdl.pollInput()) |input| {
+                if (input.quit) {
+                    running = false;
+                }
+
+                // TODO: Connect controller input to bus
+                // bus.setController1State(input.controller1);
+            }
+        }
     }
+
+    try stdout.print("Emulation stopped.\n", .{});
 }
