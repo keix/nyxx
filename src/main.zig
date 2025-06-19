@@ -71,8 +71,9 @@ pub fn main() !void {
                     running = false;
                 }
 
-                // TODO: Connect controller input to bus
-                // bus.setController1State(input.controller1);
+                // Update controller states
+                bus.controller1.setFromState(input.controller1);
+                bus.controller2.setFromState(input.controller2);
             }
         }
     }
