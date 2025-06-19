@@ -65,7 +65,7 @@ pub const CPU = struct {
 
     page_crossed: bool = false,
     branch_taken: bool = false,
-    prev_nmi_state: bool = false,  // Track previous NMI state for edge detection
+    prev_nmi_state: bool = false, // Track previous NMI state for edge detection
 
     pub fn init(bus: *Bus) CPU {
         var cpu = CPU{
@@ -92,38 +92,38 @@ pub const CPU = struct {
     pub fn step(self: *CPU) u8 {
         // Check for NMI before fetching instruction
         self.checkNMI();
-        
+
         const instr = self.fetch();
         self.execute(instr);
         return self.calculateNextCycles(instr);
     }
-    
+
     fn checkNMI(self: *CPU) void {
         // Check if PPU wants to generate NMI
-        const current_nmi = self.bus.ppu.registers.status.vblank and 
-                           (self.bus.ppu.registers.ctrl.generate_nmi == 1);
-        
+        const current_nmi = self.bus.ppu.registers.status.vblank and
+            (self.bus.ppu.registers.ctrl.generate_nmi == 1);
+
         // Detect rising edge (false -> true transition)
         if (!self.prev_nmi_state and current_nmi) {
             self.handleNMI();
         }
-        
+
         self.prev_nmi_state = current_nmi;
     }
-    
+
     fn handleNMI(self: *CPU) void {
         // Push PC high byte
         self.push(@intCast((self.registers.pc >> 8) & 0xFF));
-        // Push PC low byte  
+        // Push PC low byte
         self.push(@intCast(self.registers.pc & 0xFF));
-        
+
         // Push status with break flag clear
         const status = self.registers.flags.toByte() & ~@as(u8, 0x10); // Clear B flag
         self.push(status);
-        
+
         // Set interrupt disable flag
         self.registers.flags.i = true;
-        
+
         // Jump to NMI vector at $FFFA-$FFFB
         const nmi_low = self.readMemory(0xFFFA);
         const nmi_high = self.readMemory(0xFFFB);
