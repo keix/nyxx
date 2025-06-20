@@ -123,7 +123,7 @@ pub const Cartridge = struct {
 
     pub fn writeCHR(self: *Cartridge, addr: u16, value: u8) void {
         if (self.chr_rom.len > 0) {
-            // CHR ROM is read-only
+            // CHR ROM is read-only, ignore writes
             return;
         }
         if (addr < 0x2000) {
@@ -139,12 +139,19 @@ pub const Cartridge = struct {
 
     pub fn readCHR(self: *const Cartridge, addr: u16) u8 {
         if (addr < 0x2000) {
-            // CHR RAM
-            const offset = addr & 0x1FFF; // 8KB CHR RAM
-            if (offset < self.chr_ram.len) {
-                return self.chr_ram[offset];
+            // Check if we have CHR ROM first
+            if (self.chr_rom.len > 0) {
+                // Read from CHR ROM
+                const offset = addr & (self.chr_rom.len - 1); // Handle mirroring
+                return self.chr_rom[offset];
             } else {
-                std.debug.print("Attempted to read from CHR RAM out of bounds: 0x{X:04}\n", .{addr});
+                // No CHR ROM, use CHR RAM
+                const offset = addr & 0x1FFF; // 8KB CHR RAM
+                if (offset < self.chr_ram.len) {
+                    return self.chr_ram[offset];
+                } else {
+                    std.debug.print("Attempted to read from CHR RAM out of bounds: 0x{X:04}\n", .{addr});
+                }
             }
         }
         return 0;

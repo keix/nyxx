@@ -267,10 +267,9 @@ pub const CPU = struct {
     }
 
     inline fn calculateBranchTarget(base: u16, offset: i8) u16 {
-        return if (offset >= 0)
-            base +% @as(u16, @intCast(offset))
-        else
-            base -% @as(u16, @intCast(-offset));
+        // Convert signed offset to unsigned for safe addition
+        const unsigned_offset = @as(u16, @bitCast(@as(i16, offset)));
+        return base +% unsigned_offset;
     }
 
     inline fn readFrom(self: *CPU, mode: Opcode.AddressingMode) u8 {

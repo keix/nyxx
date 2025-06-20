@@ -35,8 +35,8 @@ test "VRAM init with vertical mirroring" {
     try std.testing.expectEqual(Mirroring.Vertical, vram.mirroring);
     try std.testing.expectEqual(@as(u8, 0), vram.buffer);
 
-    try std.testing.expectEqual(@as(u8, 0x01), vram.palette[0]);
-    try std.testing.expectEqual(@as(u8, 0x23), vram.palette[1]);
+    try std.testing.expectEqual(@as(u8, 0x0F), vram.palette[0]);
+    try std.testing.expectEqual(@as(u8, 0x0F), vram.palette[1]);
 }
 
 test "VRAM mirroring - vertical" {
@@ -103,7 +103,7 @@ test "PPU init" {
     try std.testing.expectEqual(@as(i16, -1), ppu.scanline);
     try std.testing.expectEqual(@as(u16, 0), ppu.cycle);
     try std.testing.expectEqual(@as(usize, 0), ppu.frame);
-    try std.testing.expectEqual(false, ppu.registers.status.vblank);
+    try std.testing.expectEqual(true, ppu.registers.status.vblank); // PPU starts with VBlank set
 }
 
 test "PPU register write/read - PPUCTRL" {

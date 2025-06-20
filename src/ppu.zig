@@ -45,24 +45,11 @@ pub const VRAM = struct {
     mirroring: Mirroring,
 
     pub fn init(mirroring: Mirroring) VRAM {
-        var vram = VRAM{
+        return VRAM{
             .memory = [_]u8{0} ** 0x800,
-            .palette = [_]u8{0} ** 32,
+            .palette = [_]u8{0x0F} ** 32, // Initialize with black (0x0F)
             .mirroring = mirroring,
         };
-
-        vram.palette = [_]u8{
-            0x01, 0x23, 0x27, 0x30, // BG Palette 0
-            0x0F, 0x2D, 0x3A, 0x12, // BG Palette 1
-            0x1C, 0x2B, 0x3C, 0x0A, // BG Palette 2
-            0x1E, 0x2E, 0x3E, 0x0C, // BG Palette 3
-            0x0F, 0x3D, 0x2C, 0x1A, // Sprite Palette 0
-            0x1D, 0x2F, 0x3F, 0x0B, // Sprite Palette 1
-            0x0E, 0x3E, 0x2A, 0x09, // Sprite Palette 2
-            0x1F, 0x2D, 0x3B, 0x0D, // Sprite Palette 3
-        };
-
-        return vram;
     }
 
     pub fn read(self: *VRAM, addr: u16) u8 {
@@ -307,7 +294,7 @@ const OAM = struct {
 const Registers = struct {
     ctrl: Ctrl = .{}, // $2000
     mask: Mask = @bitCast(@as(u8, 0)), // $2001
-    status: Status = @bitCast(@as(u8, 0)), // $2002
+    status: Status = @bitCast(@as(u8, 0x80)), // $2002 - Start with VBlank set
     oam_addr: u8 = 0, // $2003
     oam: OAM = .{}, // $2004 - OAM data
     scroll_unit: ScrollUnit = .{}, // $2005 + $2006 + fine X scroll
@@ -420,7 +407,7 @@ pub const PPU = struct {
             .vram = VRAM.init(cartridge.mirroring),
             ._vblank_injected = false,
             .cycle = 0,
-            .scanline = -1, // Start at pre-render line
+            .scanline = -1,
             .frame = 0,
             .cartridge = cartridge,
         };
@@ -438,6 +425,11 @@ pub const PPU = struct {
 
         if (self.scanline >= 0 and self.scanline < 240 and self.cycle >= 1 and self.cycle <= 256) {
             try self.renderPixel(fb);
+
+            // Increment horizontal scroll every 8 pixels during rendering
+            if ((self.cycle - 1) % 8 == 7 and (self.registers.mask.show_bg or self.registers.mask.show_sprites)) {
+                self.registers.scroll_unit.incrementHorizontal();
+            }
         }
 
         if (self.scanline == 241 and self.cycle == 1) {
@@ -466,8 +458,21 @@ pub const PPU = struct {
 
         // Update horizontal scroll at the end of each visible scanline
         if (self.scanline >= 0 and self.scanline < 240 and self.cycle == 256) {
-            // This is where horizontal scroll would reset and vertical scroll would increment
-            // For now, we're using simplified rendering
+            if (self.registers.mask.show_bg or self.registers.mask.show_sprites) {
+                // Increment vertical scroll
+                self.registers.scroll_unit.incrementVertical();
+            }
+        }
+
+        // Reset horizontal scroll at the end of each scanline
+        if (self.scanline >= -1 and self.scanline < 240 and self.cycle == 257) {
+            if (self.registers.mask.show_bg or self.registers.mask.show_sprites) {
+                // Copy horizontal bits from t to v: v: ....A.. ...BCDEF <- t: ....A.. ...BCDEF
+                const v = self.registers.scroll_unit.v.read();
+                const t = self.registers.scroll_unit.t.read();
+                const new_v = (v & 0x7BE0) | (t & 0x041F);
+                self.registers.scroll_unit.v.write(new_v);
+            }
         }
 
         self.cycle += 1;
@@ -492,7 +497,7 @@ pub const PPU = struct {
     }
 
     pub fn renderPixel(self: *PPU, fb: *FrameBuffer) !void {
-        if (self.cartridge.chr_rom.len == 0) return;
+        // if (self.cartridge.chr_rom.len == 0) return;
 
         // Don't render if PPU rendering is disabled
         if (!self.registers.mask.show_bg and !self.registers.mask.show_sprites) return;
@@ -504,26 +509,33 @@ pub const PPU = struct {
         var bg_palette_index: u8 = 0;
 
         // Render background pixel
-        if (self.registers.mask.show_bg) {
+        if (self.registers.mask.show_bg and (x >= 8 or self.registers.mask.show_bg_left)) {
             // Get the current VRAM address (includes scroll information)
             const v = self.registers.scroll_unit.v.read();
 
-            // Extract scroll position from v register
-            const v_nametable = (v >> 10) & 0x03;
+            // Extract scroll components from v register
+            const coarse_x = v & 0x1F;
+            const coarse_y = (v >> 5) & 0x1F;
+            const nametable_x = (v >> 10) & 0x01;
+            const nametable_y = (v >> 11) & 0x01;
+            const fine_y = (v >> 12) & 0x07;
 
-            // For simplified rendering, we'll use screen coordinates
-            const tile_x = x / 8;
-            const tile_y = y / 8;
+            // Calculate tile coordinates
+            const tile_x = coarse_x;
+            const tile_y = coarse_y;
 
-            // Get nametable from current vram address
-            const nametable_select = v_nametable;
+            // Get nametable base address
+            const nametable_select = (nametable_y << 1) | nametable_x;
             const nametable_base = 0x2000 + @as(u16, nametable_select) * 0x400;
 
             const name_table_index = tile_y * 32 + tile_x;
             const tile_id = self.vram.read(nametable_base + name_table_index);
 
-            const pixel_x: u3 = @intCast(x % 8);
-            const pixel_y: u3 = @intCast(y % 8);
+            // Calculate pixel position within the tile
+            // We need to consider both the fine X scroll and the current pixel position
+            const current_pixel = (self.cycle - 1) % 8;
+            const pixel_x: u3 = @intCast((current_pixel + self.registers.scroll_unit.x) & 0x07);
+            const pixel_y: u3 = @intCast(fine_y);
 
             const bg_table_addr: usize = if (self.registers.ctrl.background_table == 0) 0x0000 else 0x1000;
             const chr_index = bg_table_addr + @as(usize, tile_id) * 16;
@@ -539,13 +551,15 @@ pub const PPU = struct {
                 bg_color_index = @intCast((bit1 << 1) | bit0);
 
                 // Get attribute byte for palette selection
-                const attr_index = (tile_y / 4) * 8 + (tile_x / 4);
+                const attr_x = tile_x / 4;
+                const attr_y = tile_y / 4;
+                const attr_index = attr_y * 8 + attr_x;
                 const attr_addr = nametable_base + 0x03C0 + @as(u16, attr_index);
                 const attr_byte = self.vram.read(attr_addr);
 
-                const offset_y = (tile_y % 4) / 2;
-                const offset_x = (tile_x % 4) / 2;
-                const shift: u3 = @intCast((offset_y * 2 + offset_x) * 2);
+                const quad_x = (tile_x % 4) / 2;
+                const quad_y = (tile_y % 4) / 2;
+                const shift: u3 = @intCast((quad_y * 2 + quad_x) * 2);
                 const palette_number = (attr_byte >> shift) & 0b11;
                 bg_palette_index = @intCast(palette_number);
             }
@@ -558,7 +572,7 @@ pub const PPU = struct {
         var sprite_is_zero = false;
 
         // Render sprite pixel
-        if (self.registers.mask.show_sprites) {
+        if (self.registers.mask.show_sprites and (x >= 8 or self.registers.mask.show_sprites_left)) {
             // Check each sprite in secondary OAM
             for (0..self.secondary_oam.count) |i| {
                 const sprite = self.secondary_oam.sprites[i];
