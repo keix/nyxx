@@ -41,6 +41,7 @@ pub const Bus = struct {
         return switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF],
             0x2000...0x3FFF => self.ppu.readRegister(@intCast(addr & 0x0007)),
+            0x4015 => self.apu.read(addr),
             0x4016 => self.controller1.read() | (self.ppu.open_bus.read() & 0xE0),
             0x4017 => self.controller2.read() | (self.ppu.open_bus.read() & 0xE0),
             0x8000...0xFFFF => self.cartridge.read(addr),
@@ -52,7 +53,7 @@ pub const Bus = struct {
         switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF] = value,
             0x2000...0x3FFF => self.ppu.writeRegister(@intCast(addr & 0x0007), value),
-            0x4000...0x4007 => self.apu.writePulse(@intCast(addr & 0x0007), value),
+            0x4000...0x4007, 0x4015, 0x4017 => self.apu.write(addr, value),
             0x4014 => self.performOamDma(value),
             0x4016 => self.controllerWrite(value),
             0x8000...0xFFFF => {},

@@ -57,6 +57,9 @@ pub fn main() !void {
         for (0..(cycles * 3)) |_| {
             try bus.ppu.step(&fb);
         }
+        
+        // Execute APU cycles (APU runs at half CPU speed)
+        bus.apu.step(cycles);
 
         // Check if frame is complete
         if (frame_cycles >= target_cycles) {

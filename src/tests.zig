@@ -4,4 +4,5 @@ const std = @import("std");
 test {
     _ = @import("tests/cpu.zig");
     _ = @import("tests/ppu.zig");
+    _ = @import("tests/apu.zig");
 }
