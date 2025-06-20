@@ -40,7 +40,8 @@ test "LDA loads immediate value into A and updates flags" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x00 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step();
@@ -55,7 +56,8 @@ test "TAX transfers A to X" {
     var cartridge = try buildTestRom(allocator, &.{0xAA}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x42;
@@ -71,7 +73,8 @@ test "INX increments X and updates flags" {
     var cartridge = try buildTestRom(allocator, &.{0xE8}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.x = 0x7F;
@@ -87,7 +90,8 @@ test "DEX decrements X and sets flags" {
     var cartridge = try buildTestRom(allocator, &.{0xCA}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.x = 1;
@@ -103,7 +107,8 @@ test "CMP compares A with immediate value" {
     var cartridge = try buildTestRom(allocator, &.{ 0xC9, 0x42 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x42;
@@ -119,7 +124,8 @@ test "LDY loads immediate value into Y" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0x7F }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step();
@@ -134,7 +140,8 @@ test "TAY transfers A to Y and updates flags" {
     var cartridge = try buildTestRom(allocator, &.{0xA8}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x80;
@@ -150,7 +157,8 @@ test "INY increments Y and updates flags" {
     var cartridge = try buildTestRom(allocator, &.{0xC8}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.y = 0xFF;
@@ -166,7 +174,8 @@ test "DEY decrements Y and updates flags" {
     var cartridge = try buildTestRom(allocator, &.{0x88}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.y = 0x01;
@@ -182,7 +191,8 @@ test "BEQ branches if Z flag is set" {
     var cartridge = try buildTestRom(allocator, &.{ 0xF0, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.z = true;
@@ -196,7 +206,8 @@ test "BEQ does not branch if Z flag is clear" {
     var cartridge = try buildTestRom(allocator, &.{ 0xF0, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.z = false;
@@ -210,7 +221,8 @@ test "BEQ takes branch and crosses page boundary (+2 cycles)" {
     var cartridge = try buildTestRom(allocator, &.{ 0xF0, 0x01 }, 0x80FD);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.flags.z = true;
 
@@ -225,7 +237,8 @@ test "BNE branches if Z flag is clear" {
     var cartridge = try buildTestRom(allocator, &.{ 0xD0, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.z = false;
@@ -239,7 +252,8 @@ test "BNE does not branch if Z flag is set" {
     var cartridge = try buildTestRom(allocator, &.{ 0xD0, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.z = true;
@@ -253,7 +267,8 @@ test "BPL branches if N flag is clear" {
     var cartridge = try buildTestRom(allocator, &.{ 0x10, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.flags.n = false;
 
@@ -266,7 +281,8 @@ test "BPL does not branch if N flag is set" {
     var cartridge = try buildTestRom(allocator, &.{ 0x10, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.flags.n = true;
 
@@ -279,7 +295,8 @@ test "BPL takes branch and crosses page boundary (+2 cycles)" {
     var cartridge = try buildTestRom(allocator, &.{ 0x10, 0x02 }, 0x80FD);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.flags.n = false;
 
@@ -293,7 +310,8 @@ test "BMI branches if N flag is set" {
     var cartridge = try buildTestRom(allocator, &.{ 0x30, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.flags.n = true;
 
@@ -306,7 +324,8 @@ test "BCC branches if C flag is clear" {
     var cartridge = try buildTestRom(allocator, &.{ 0x90, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.flags.c = false;
 
@@ -319,7 +338,8 @@ test "BCS branches if C flag is set" {
     var cartridge = try buildTestRom(allocator, &.{ 0xB0, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.flags.c = true;
 
@@ -332,7 +352,8 @@ test "BVC branches if V flag is clear" {
     var cartridge = try buildTestRom(allocator, &.{ 0x50, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.flags.v = false;
 
@@ -345,7 +366,8 @@ test "BVS branches if V flag is set" {
     var cartridge = try buildTestRom(allocator, &.{ 0x70, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.flags.v = true;
 
@@ -358,7 +380,8 @@ test "PHA pushes A onto stack" {
     var cartridge = try buildTestRom(allocator, &.{0x48}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0xAB;
@@ -374,7 +397,8 @@ test "PLA pulls from stack into A and updates flags" {
     var cartridge = try buildTestRom(allocator, &.{0x68}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.s = 0xFC;
@@ -392,7 +416,8 @@ test "PHP pushes processor flags onto the stack" {
     var cartridge = try buildTestRom(allocator, &.{0x08}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags = .{ .n = true, .z = true, .c = true }; // sample flags
@@ -412,7 +437,8 @@ test "PLP pulls flags from stack" {
     var cartridge = try buildTestRom(allocator, &.{0x28}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x01FD, 0b11001101); // set various flags
@@ -433,7 +459,8 @@ test "SEC sets carry flag" {
     var cartridge = try buildTestRom(allocator, &.{0x38}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.c = false;
@@ -447,7 +474,8 @@ test "CLC clears carry flag" {
     var cartridge = try buildTestRom(allocator, &.{0x18}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.c = true;
@@ -461,7 +489,8 @@ test "SEI sets interrupt disable flag" {
     var cartridge = try buildTestRom(allocator, &.{0x78}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.i = false;
@@ -475,7 +504,8 @@ test "CLI clears interrupt disable flag" {
     var cartridge = try buildTestRom(allocator, &.{0x58}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.i = true;
@@ -489,7 +519,8 @@ test "STA stores A into zero page" {
     var cartridge = try buildTestRom(allocator, &.{ 0x85, 0x10 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x42;
@@ -503,7 +534,8 @@ test "STA stores A into absolute RAM address" {
     var cartridge = try buildTestRom(allocator, &.{ 0x8D, 0x00, 0x10 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x99;
@@ -517,7 +549,8 @@ test "STY stores Y into zero page" {
     var cartridge = try buildTestRom(allocator, &.{ 0x84, 0x10 }, 0x8000); // STY $10
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.y = 0x77;
 
@@ -531,7 +564,8 @@ test "STY stores Y into absolute address" {
     var cartridge = try buildTestRom(allocator, &.{ 0x8C, 0x34, 0x12 }, 0x8000); // STY $1234
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.y = 0x88;
 
@@ -545,7 +579,8 @@ test "STX stores X into zero page" {
     var cartridge = try buildTestRom(allocator, &.{ 0x86, 0x20 }, 0x8000); // STX $20
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.x = 0x55;
 
@@ -559,7 +594,8 @@ test "STX stores X into absolute address" {
     var cartridge = try buildTestRom(allocator, &.{ 0x8E, 0x34, 0x12 }, 0x8000); // STX $1234
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.x = 0xA5;
 
@@ -573,7 +609,8 @@ test "LDX loads immediate value into X" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x10 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step();
@@ -586,7 +623,8 @@ test "BIT sets Z flag if A & M == 0" {
     var cartridge = try buildTestRom(allocator, &.{ 0x24, 0x10 }, 0x8000); // BIT $10
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x00;
@@ -604,7 +642,8 @@ test "BIT clears Z flag if A & M != 0" {
     var cartridge = try buildTestRom(allocator, &.{ 0x2C, 0x34, 0x12 }, 0x8000); // BIT $1234
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x01;
@@ -622,7 +661,8 @@ test "TXA transfers X to A and updates flags" {
     var cartridge = try buildTestRom(allocator, &.{0x8A}, 0x8000); // TXA
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.x = 0x00;
@@ -638,7 +678,8 @@ test "TYA transfers Y to A and updates flags" {
     var cartridge = try buildTestRom(allocator, &.{0x98}, 0x8000); // TYA
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.y = 0xFF;
@@ -654,7 +695,8 @@ test "TSX transfers stack pointer to X and updates flags" {
     var cartridge = try buildTestRom(allocator, &.{0xBA}, 0x8000); // TSX
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.s = 0x00;
@@ -670,7 +712,8 @@ test "TXS transfers X to stack pointer" {
     var cartridge = try buildTestRom(allocator, &.{0x9A}, 0x8000); // TXS
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.x = 0xFE;
@@ -684,7 +727,8 @@ test "INC increments value at memory and sets Z/N flags" {
     var cartridge = try buildTestRom(allocator, &.{ 0xE6, 0x10 }, 0x8000); // INC $10
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     bus.write(0x0010, 0xFF);
 
@@ -700,7 +744,8 @@ test "DEC decrements value at memory and sets Z/N flags" {
     var cartridge = try buildTestRom(allocator, &.{ 0xC6, 0x10 }, 0x8000); // DEC $10
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     bus.write(0x0010, 0x01);
 
@@ -716,7 +761,8 @@ test "JMP absolute sets PC to target" {
     var cartridge = try buildTestRom(allocator, &.{ 0x4C, 0x00, 0x90 }, 0x8000); // JMP $9000
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step();
@@ -728,7 +774,8 @@ test "JMP indirect uses address stored in memory (6502 page bug case)" {
     var cartridge = try buildTestRom(allocator, &.{ 0x6C, 0xFF, 0x00 }, 0x8000); // JMP ($00FF)
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x00FF, 0x34); // LSB
@@ -743,7 +790,8 @@ test "JSR pushes return address and jumps" {
     var cartridge = try buildTestRom(allocator, &.{ 0x20, 0x00, 0x90 }, 0x8000); // JSR $9000
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     const initial_sp = cpu.registers.s;
@@ -770,7 +818,8 @@ test "LDA Absolute,X with page crossing increases cycles" {
     var cartridge = try buildTestRom(allocator, program, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     try std.testing.expect(cpu.step() == 2); // LDX
@@ -783,7 +832,8 @@ test "RTS pulls return address and jumps to PC+1" {
     var cartridge = try buildTestRom(allocator, &.{0x60}, 0x8000); // RTS opcode
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.s = 0xFD;
@@ -802,7 +852,8 @@ test "RTI restores flags and jumps to PC" {
     var cartridge = try buildTestRom(allocator, &.{0x40}, 0x8000); // RTI
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.s = 0xFC;
@@ -829,7 +880,8 @@ test "ADC immediate adds correctly without carry or overflow" {
     var cartridge = try buildTestRom(allocator, &.{ 0x69, 0x10 }, 0x8000); // ADC #$10
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x20;
@@ -850,7 +902,8 @@ test "ADC zero page" {
     var cartridge = try buildTestRom(allocator, &.{ 0x65, 0x10 }, 0x8000); // ADC $10
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     bus.write(0x0010, 0x05);
 
@@ -867,7 +920,8 @@ test "ADC zero page,X" {
     var cartridge = try buildTestRom(allocator, &.{ 0x75, 0x10 }, 0x8000); // ADC $10,X
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.x = 0x01;
     bus.write(0x0011, 0x02);
@@ -883,7 +937,8 @@ test "ADC absolute" {
     var cartridge = try buildTestRom(allocator, &.{ 0x6D, 0x34, 0x12 }, 0x8000); // ADC $1234
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     bus.write(0x1234, 0x10);
 
@@ -898,7 +953,8 @@ test "ADC absolute,X with page crossing (in RAM)" {
     var cartridge = try buildTestRom(allocator, &.{ 0x7D, 0xFF, 0x00 }, 0x8000); // ADC $00FF,X
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.x = 0x01;
@@ -916,7 +972,8 @@ test "ADC absolute,Y" {
     var cartridge = try buildTestRom(allocator, &.{ 0x79, 0x00, 0x02 }, 0x8000); // ADC $0200,Y
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x03;
@@ -933,7 +990,8 @@ test "ADC indirect,Y" {
     var cartridge = try buildTestRom(allocator, &.{ 0x71, 0x10 }, 0x8000); // ADC ($10),Y
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // ($10) = 0x0200, Y = 1 → target = 0x0201
@@ -954,7 +1012,8 @@ test "SBC absolute" {
     var cartridge = try buildTestRom(allocator, &.{ 0xED, 0x03, 0x80, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x05;
@@ -970,7 +1029,8 @@ test "SBC absolute,X" {
     var cartridge = try buildTestRom(allocator, &.{ 0xFD, 0x04, 0x80, 0x00, 0x00, 0x00, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
     cpu.registers.a = 0x05;
     cpu.registers.x = 0x02;
@@ -986,7 +1046,8 @@ test "SBC zero page" {
     var cartridge = try buildTestRom(allocator, &.{ 0xE5, 0x10 }, 0x8000); // SBC $10
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0010, 0x02);
@@ -1004,7 +1065,8 @@ test "SBC zero page,X" {
     var cartridge = try buildTestRom(allocator, &.{ 0xF5, 0x10 }, 0x8000); // SBC $10,X
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.x = 0x01;
@@ -1023,7 +1085,8 @@ test "SBC indirect,Y" {
     var cartridge = try buildTestRom(allocator, &.{ 0xF1, 0x10 }, 0x8000); // SBC ($10),Y
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Setup: ($10) = 0x0200, Y = 1 → effective = 0x0201
@@ -1045,7 +1108,8 @@ test "SBC immediate" {
     var cartridge = try buildTestRom(allocator, &.{ 0xE9, 0x02 }, 0x8000); // SBC #$02
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0x05;
@@ -1061,7 +1125,8 @@ test "AND immediate updates A and flags" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0xCC, 0x29, 0x0F }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$CC
@@ -1078,7 +1143,8 @@ test "AND zero result sets zero flag" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x0F, 0x29, 0xF0 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$0F
@@ -1094,7 +1160,8 @@ test "AND result sets negative flag" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0xF0, 0x29, 0xF0 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$F0
@@ -1110,7 +1177,8 @@ test "AND zero page" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0xFF, 0x25, 0x10 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0010, 0x0F);
@@ -1131,7 +1199,8 @@ test "AND absolute,X with page crossing" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0100, 0x0F); // Store test value at target address
@@ -1154,7 +1223,8 @@ test "AND absolute,Y with page crossing" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0100, 0x55); // Store test value
@@ -1177,7 +1247,8 @@ test "AND zero page,X" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0015, 0x18); // Store test value at $15
@@ -1200,7 +1271,8 @@ test "AND indirect,X" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Setup indirect address at $24-$25
@@ -1226,7 +1298,8 @@ test "AND indirect,Y" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Setup base address at $40-$41
@@ -1260,7 +1333,8 @@ test "AND all addressing modes consistency" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1276,7 +1350,8 @@ test "AND all addressing modes consistency" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0050, mask);
 
@@ -1294,7 +1369,8 @@ test "AND all addressing modes consistency" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0300, mask);
 
@@ -1315,7 +1391,8 @@ test "AND edge cases" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1332,7 +1409,8 @@ test "AND edge cases" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1350,7 +1428,8 @@ test "AND edge cases" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1366,7 +1445,8 @@ test "ORA immediate updates A and flags" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x0C, 0x09, 0x03 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$0C (00001100)
@@ -1383,7 +1463,8 @@ test "ORA zero value preserves original" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x42, 0x09, 0x00 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$42
@@ -1399,7 +1480,8 @@ test "ORA sets negative flag" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x70, 0x09, 0x80 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$70 (01110000)
@@ -1415,7 +1497,8 @@ test "ORA with zero accumulator sets zero flag only when both are zero" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x00, 0x09, 0x00 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$00
@@ -1431,7 +1514,8 @@ test "ORA zero page" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x33, 0x05, 0x10 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0010, 0xCC);
@@ -1453,7 +1537,8 @@ test "ORA zero page,X" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0015, 0xF0);
@@ -1476,7 +1561,8 @@ test "ORA absolute" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0300, 0xAA); // 10101010
@@ -1499,7 +1585,8 @@ test "ORA absolute,X with page crossing" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0100, 0x44);
@@ -1523,7 +1610,8 @@ test "ORA absolute,Y with page crossing" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0100, 0x22);
@@ -1547,7 +1635,8 @@ test "ORA indirect,X" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Setup indirect address at $24-$25
@@ -1573,7 +1662,8 @@ test "ORA indirect,Y" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Setup base address at $40-$41
@@ -1602,7 +1692,8 @@ test "ORA edge cases" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1620,7 +1711,8 @@ test "ORA edge cases" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1636,7 +1728,8 @@ test "EOR immediate updates A and flags" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0xCC, 0x49, 0xAA }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$CC (11001100)
@@ -1653,7 +1746,8 @@ test "EOR with same value results in zero" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x42, 0x49, 0x42 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$42
@@ -1669,7 +1763,8 @@ test "EOR sets negative flag" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x70, 0x49, 0xFF }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$70 (01110000)
@@ -1685,7 +1780,8 @@ test "EOR with zero preserves original value" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x55, 0x49, 0x00 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$55
@@ -1701,7 +1797,8 @@ test "EOR zero page" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0xF0, 0x45, 0x10 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0010, 0x0F);
@@ -1723,7 +1820,8 @@ test "EOR zero page,X" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0023, 0x66);
@@ -1746,7 +1844,8 @@ test "EOR absolute" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0300, 0xC3); // 11000011
@@ -1769,7 +1868,8 @@ test "EOR absolute,X with page crossing" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0100, 0x5A);
@@ -1793,7 +1893,8 @@ test "EOR absolute,Y with page crossing" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0100, 0x18);
@@ -1817,7 +1918,8 @@ test "EOR indirect,X" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Setup indirect address at $24-$25
@@ -1843,7 +1945,8 @@ test "EOR indirect,Y" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Setup base address at $40-$41
@@ -1872,7 +1975,8 @@ test "EOR bit manipulation patterns" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1889,7 +1993,8 @@ test "EOR bit manipulation patterns" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1916,7 +2021,8 @@ test "EOR all addressing modes consistency" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1932,7 +2038,8 @@ test "EOR all addressing modes consistency" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0050, xor_mask);
 
@@ -1950,7 +2057,8 @@ test "EOR all addressing modes consistency" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0400, xor_mask);
 
@@ -1972,7 +2080,8 @@ test "EOR edge cases" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1989,7 +2098,8 @@ test "EOR edge cases" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -2004,7 +2114,8 @@ test "CPX immediate - equal values" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x42, 0xE0, 0x42 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDX #$42
@@ -2021,7 +2132,8 @@ test "CPX immediate - X greater than value" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x50, 0xE0, 0x30 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDX #$50
@@ -2037,7 +2149,8 @@ test "CPX immediate - X less than value" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x30, 0xE0, 0x50 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDX #$30
@@ -2053,7 +2166,8 @@ test "CPX immediate - X is zero, comparing with positive" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x00, 0xE0, 0x01 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDX #$00
@@ -2069,7 +2183,8 @@ test "CPX immediate - comparing with zero" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x80, 0xE0, 0x00 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDX #$80
@@ -2085,7 +2200,8 @@ test "CPX zero page" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x7F, 0xE4, 0x10 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0010, 0x7F);
@@ -2103,7 +2219,8 @@ test "CPX absolute" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x40, 0xEC, 0x00, 0x30 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x3000, 0x20);
@@ -2121,7 +2238,8 @@ test "CPX does not affect X register" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x99, 0xE0, 0x55 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDX #$99
@@ -2141,7 +2259,8 @@ test "CPX boundary values" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0xFF, 0xE0, 0xFF }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDX #$FF
@@ -2157,7 +2276,8 @@ test "CPX boundary values" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0xFF, 0xE0, 0x00 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDX #$FF
@@ -2173,7 +2293,8 @@ test "CPX boundary values" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x00, 0xE0, 0xFF }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDX #$00
@@ -2193,7 +2314,8 @@ test "CPX cycles count" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x42, 0xE0, 0x42 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDX
@@ -2206,7 +2328,8 @@ test "CPX cycles count" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x42, 0xE4, 0x10 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0010, 0x42);
 
@@ -2220,7 +2343,8 @@ test "CPX cycles count" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x42, 0xEC, 0x00, 0x30 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x3000, 0x42);
 
@@ -2243,7 +2367,8 @@ test "CPX common usage patterns" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDX #$00
@@ -2273,7 +2398,8 @@ test "CPY immediate - equal values" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0x42, 0xC0, 0x42 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDY #$42
@@ -2290,7 +2416,8 @@ test "CPY immediate - Y greater than value" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0x60, 0xC0, 0x40 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDY #$60
@@ -2306,7 +2433,8 @@ test "CPY immediate - Y less than value" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0x20, 0xC0, 0x40 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDY #$20
@@ -2322,7 +2450,8 @@ test "CPY immediate - Y is zero, comparing with positive" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0x00, 0xC0, 0x01 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDY #$00
@@ -2338,7 +2467,8 @@ test "CPY immediate - comparing with zero" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0x80, 0xC0, 0x00 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDY #$80
@@ -2354,7 +2484,8 @@ test "CPY zero page" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0x7F, 0xC4, 0x10 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0010, 0x7F);
@@ -2372,7 +2503,8 @@ test "CPY absolute" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0x50, 0xCC, 0x00, 0x30 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x3000, 0x30);
@@ -2390,7 +2522,8 @@ test "CPY does not affect Y register" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0x88, 0xC0, 0x44 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDY #$88
@@ -2410,7 +2543,8 @@ test "CPY boundary values" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0xFF, 0xC0, 0xFF }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDY #$FF
@@ -2426,7 +2560,8 @@ test "CPY boundary values" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0xFF, 0xC0, 0x00 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDY #$FF
@@ -2442,7 +2577,8 @@ test "CPY boundary values" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0x00, 0xC0, 0xFF }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDY #$00
@@ -2462,7 +2598,8 @@ test "CPY cycles count" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0x42, 0xC0, 0x42 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDY
@@ -2475,7 +2612,8 @@ test "CPY cycles count" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0x42, 0xC4, 0x10 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0010, 0x42);
 
@@ -2489,7 +2627,8 @@ test "CPY cycles count" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA0, 0x42, 0xCC, 0x00, 0x30 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x3000, 0x42);
 
@@ -2512,7 +2651,8 @@ test "CPY common usage patterns" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDY #$00
@@ -2546,7 +2686,8 @@ test "CPY common usage patterns" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDY #$05
@@ -2576,7 +2717,8 @@ test "SED sets decimal flag" {
     var cartridge = try buildTestRom(allocator, &.{0xF8}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.d = false;
@@ -2590,7 +2732,8 @@ test "SED does not affect other flags" {
     var cartridge = try buildTestRom(allocator, &.{0xF8}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Set some other flags
@@ -2616,7 +2759,8 @@ test "CLD clears decimal flag" {
     var cartridge = try buildTestRom(allocator, &.{0xD8}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.d = true;
@@ -2630,7 +2774,8 @@ test "CLD does not affect other flags" {
     var cartridge = try buildTestRom(allocator, &.{0xD8}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Set all flags
@@ -2656,7 +2801,8 @@ test "CLV clears overflow flag" {
     var cartridge = try buildTestRom(allocator, &.{0xB8}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.v = true;
@@ -2670,7 +2816,8 @@ test "CLV does not affect other flags" {
     var cartridge = try buildTestRom(allocator, &.{0xB8}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Set all flags
@@ -2699,7 +2846,8 @@ test "flag instructions cycle count" {
         var cartridge = try buildTestRom(allocator, &.{0xF8}, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         const cycles = cpu.step(); // SED
@@ -2711,7 +2859,8 @@ test "flag instructions cycle count" {
         var cartridge = try buildTestRom(allocator, &.{0xD8}, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         const cycles = cpu.step(); // CLD
@@ -2723,7 +2872,8 @@ test "flag instructions cycle count" {
         var cartridge = try buildTestRom(allocator, &.{0xB8}, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         const cycles = cpu.step(); // CLV
@@ -2740,7 +2890,8 @@ test "decimal flag sequence" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Initially false
@@ -2764,7 +2915,8 @@ test "overflow flag can only be cleared, not set by CLV" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Set overflow flag manually (simulating arithmetic operation)
@@ -2790,7 +2942,8 @@ test "flag instructions in combination with arithmetic" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA #$7F
@@ -2821,7 +2974,8 @@ test "decimal mode flag for BCD operations" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // SED
@@ -2842,7 +2996,8 @@ test "NOP does absolutely nothing" {
     var cartridge = try buildTestRom(allocator, &.{0xEA}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Save initial state
@@ -2879,7 +3034,8 @@ test "NOP cycle count" {
     var cartridge = try buildTestRom(allocator, &.{0xEA}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     const cycles = cpu.step(); // NOP
@@ -2896,7 +3052,8 @@ test "multiple NOPs in sequence" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     const initial_pc = cpu.registers.pc;
@@ -2925,7 +3082,8 @@ test "NOP between meaningful operations" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$42
@@ -2949,7 +3107,8 @@ test "NOP with all flags set" {
     var cartridge = try buildTestRom(allocator, &.{0xEA}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Set all flags to true
@@ -2978,7 +3137,8 @@ test "NOP with modified registers" {
     var cartridge = try buildTestRom(allocator, &.{0xEA}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Set registers to specific values
@@ -3009,7 +3169,8 @@ test "NOP timing in real program context" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     var total_cycles: u32 = 0;
@@ -3033,7 +3194,8 @@ test "LSR accumulator - basic shift" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x02, 0x4A }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$02
@@ -3051,7 +3213,8 @@ test "LSR accumulator - carry out" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x03, 0x4A }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$03
@@ -3068,7 +3231,8 @@ test "LSR accumulator - result zero" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x01, 0x4A }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$01
@@ -3085,7 +3249,8 @@ test "LSR accumulator - large value" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0xFE, 0x4A }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$FE (11111110)
@@ -3102,7 +3267,8 @@ test "LSR zero page" {
     var cartridge = try buildTestRom(allocator, &.{ 0x46, 0x10 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0010, 0x0A); // 00001010
@@ -3120,7 +3286,8 @@ test "LSR zero page,X" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x05, 0x56, 0x10 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0015, 0x07); // 00000111
@@ -3139,7 +3306,8 @@ test "LSR absolute" {
     var cartridge = try buildTestRom(allocator, &.{ 0x4E, 0x00, 0x02 }, 0x8000); // 0x0200に変更
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0200, 0x80);
@@ -3154,7 +3322,8 @@ test "LSR absolute,X" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x02, 0x5E, 0x00, 0x02 }, 0x8000); // 0x0200に変更
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0202, 0xFF); // 0x0200 + X(2) = 0x0202
@@ -3176,7 +3345,8 @@ test "LSR cycle counts" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x02, 0x4A }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -3189,7 +3359,8 @@ test "LSR cycle counts" {
         var cartridge = try buildTestRom(allocator, &.{ 0x46, 0x10 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0010, 0x02);
 
@@ -3202,7 +3373,8 @@ test "LSR cycle counts" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x05, 0x56, 0x10 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0015, 0x02);
 
@@ -3216,7 +3388,8 @@ test "LSR cycle counts" {
         var cartridge = try buildTestRom(allocator, &.{ 0x4E, 0x00, 0x30 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x3000, 0x02);
 
@@ -3229,7 +3402,8 @@ test "LSR cycle counts" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x02, 0x5E, 0x00, 0x30 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x3002, 0x02);
 
@@ -3256,7 +3430,8 @@ test "LSR flag combinations" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA9, case.input, 0x4A }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -3274,7 +3449,8 @@ test "LSR does not affect other registers" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x0A, 0x4A }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Set other registers
@@ -3300,7 +3476,8 @@ test "LSR practical usage - divide by 2" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$14 (20)
@@ -3320,7 +3497,8 @@ test "ASL accumulator - basic shift" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x01, 0x0A }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$01
@@ -3338,7 +3516,8 @@ test "ASL accumulator - carry out" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x80, 0x0A }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$80 (10000000)
@@ -3355,7 +3534,8 @@ test "ASL accumulator - sets negative flag" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x40, 0x0A }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$40 (01000000)
@@ -3372,7 +3552,8 @@ test "ASL accumulator - carry and negative" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0xC0, 0x0A }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$C0 (11000000)
@@ -3389,7 +3570,8 @@ test "ASL zero page" {
     var cartridge = try buildTestRom(allocator, &.{ 0x06, 0x10 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0010, 0x05); // 00000101
@@ -3407,7 +3589,8 @@ test "ASL zero page,X" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x03, 0x16, 0x10 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0013, 0x07); // 00000111
@@ -3426,7 +3609,8 @@ test "ASL absolute" {
     var cartridge = try buildTestRom(allocator, &.{ 0x0E, 0x00, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0200, 0x20); // 00100000
@@ -3444,7 +3628,8 @@ test "ASL absolute,X" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x04, 0x1E, 0x00, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0204, 0x81); // 10000001
@@ -3466,7 +3651,8 @@ test "ASL cycle counts" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x01, 0x0A }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -3479,7 +3665,8 @@ test "ASL cycle counts" {
         var cartridge = try buildTestRom(allocator, &.{ 0x06, 0x10 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0010, 0x01);
 
@@ -3492,7 +3679,8 @@ test "ASL cycle counts" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x03, 0x16, 0x10 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0013, 0x01);
 
@@ -3506,7 +3694,8 @@ test "ASL cycle counts" {
         var cartridge = try buildTestRom(allocator, &.{ 0x0E, 0x00, 0x02 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0200, 0x01);
 
@@ -3519,7 +3708,8 @@ test "ASL cycle counts" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x04, 0x1E, 0x00, 0x02 }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0204, 0x01);
 
@@ -3546,7 +3736,8 @@ test "ASL flag combinations" {
         var cartridge = try buildTestRom(allocator, &.{ 0xA9, case.input, 0x0A }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -3564,7 +3755,8 @@ test "ASL does not affect other registers" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x05, 0x0A }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Set other registers
@@ -3590,7 +3782,8 @@ test "ASL practical usage - multiply by 2" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$05 (5)
@@ -3613,7 +3806,8 @@ test "ASL overflow example" {
     }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     _ = cpu.step(); // LDA #$90
@@ -3629,7 +3823,8 @@ test "ROL accumulator - basic rotate" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x81, 0x2A }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.c = false; // Clear carry initially
@@ -3648,7 +3843,8 @@ test "ROL accumulator - with carry in" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x40, 0x2A }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.c = true; // Set carry initially
@@ -3667,7 +3863,8 @@ test "ROR accumulator - basic rotate" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x81, 0x6A }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.c = false; // Clear carry initially
@@ -3686,7 +3883,8 @@ test "ROR accumulator - with carry in" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA9, 0x02, 0x6A }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.flags.c = true; // Set carry initially
@@ -3705,7 +3903,8 @@ test "ROL zero page" {
     var cartridge = try buildTestRom(allocator, &.{ 0x26, 0x10 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0010, 0x55); // 01010101
@@ -3723,7 +3922,8 @@ test "ROR absolute,X" {
     var cartridge = try buildTestRom(allocator, &.{ 0xA2, 0x03, 0x7E, 0x00, 0x02 }, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.write(0x0203, 0xAA); // 10101010
@@ -3750,7 +3950,8 @@ test "Rotate operations comprehensive" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         cpu.registers.flags.c = false;
@@ -3775,7 +3976,8 @@ test "Rotate operations comprehensive" {
         }, 0x8000);
         defer cartridge.deinit(allocator);
 
-        var bus = Bus.init(&cartridge);
+        var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         cpu.registers.flags.c = false;
@@ -3797,7 +3999,8 @@ test "NOP is truly the easiest instruction to implement" {
     var cartridge = try buildTestRom(allocator, &.{0xEA}, 0x8000);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     // Before NOP
@@ -3816,6 +4019,29 @@ test "NOP is truly the easiest instruction to implement" {
     // NOP: The instruction that does nothing, perfectly!
 }
 
+// Helper function for testing
+const DummyCart = struct {
+    pub fn read(self: *const DummyCart, addr: u16) u8 {
+        _ = self;
+        _ = addr;
+        return 0;
+    }
+
+    pub fn write(self: *DummyCart, addr: u16, value: u8) void {
+        _ = self;
+        _ = addr;
+        _ = value;
+    }
+};
+
+fn makeTestCart() DummyCart {
+    return DummyCart{};
+}
+
+fn makeBus(cart: *DummyCart) !Bus {
+    return Bus.init(@ptrCast(cart), std.testing.allocator);
+}
+
 // test "BRK sets correct stack and vectors" {
 //     const allocator = std.testing.allocator;
 
@@ -3826,7 +4052,8 @@ test "NOP is truly the easiest instruction to implement" {
 //     rom[0xFFFE] = 0x34;
 //     rom[0xFFFF] = 0x12;
 
-//     var bus = Bus.init(&cartridge);
+//     var bus = try Bus.init(&cartridge, allocator);
+//     defer bus.deinit();
 //     var cpu = CPU.init(&bus);
 
 //     const initial_sp = cpu.registers.s;
@@ -3849,7 +4076,8 @@ test "STA stores A into $2000 and updates PPUCTRL" {
     var cartridge = try buildTestRom(allocator, &.{ 0x8D, 0x00, 0x20 }, 0x8000); // STA $2000
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0b10100000;
@@ -3863,7 +4091,8 @@ test "STA stores A into $2001 and updates PPUMASK" {
     var cartridge = try buildTestRom(allocator, &.{ 0x8D, 0x01, 0x20 }, 0x8000); // STA $2001
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     cpu.registers.a = 0b00011111;
@@ -3877,7 +4106,8 @@ test "BIT $2002 reflects PPU status VBlank and clears it" {
     var cartridge = try buildTestRom(allocator, &.{ 0x2C, 0x02, 0x20 }, 0x8000); // BIT $2002
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     bus.ppu.registers.status.vblank = true;
