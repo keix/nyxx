@@ -532,9 +532,8 @@ pub const PPU = struct {
             const tile_id = self.vram.read(nametable_base + name_table_index);
 
             // Calculate pixel position within the tile
-            // We need to consider both the fine X scroll and the current pixel position
-            const current_pixel = (self.cycle - 1) % 8;
-            const pixel_x: u3 = @intCast((current_pixel + self.registers.scroll_unit.x) & 0x07);
+            // The cycle position determines which pixel we're fetching
+            const pixel_x: u3 = @intCast((self.cycle - 1) & 0x07);
             const pixel_y: u3 = @intCast(fine_y);
 
             const bg_table_addr: usize = if (self.registers.ctrl.background_table == 0) 0x0000 else 0x1000;
