@@ -1,12 +1,14 @@
+const std = @import("std");
+const APU = @import("apu.zig").APU;
 const PPU = @import("ppu.zig").PPU;
 const Cartridge = @import("cartridge.zig").Cartridge;
 const Controller = @import("controller.zig").Controller;
-const std = @import("std");
 
 pub const Bus = struct {
     ram: [2048]u8,
     cartridge: *Cartridge,
     ppu: PPU,
+    apu: APU,
     controller1: Controller,
     controller2: Controller,
 
@@ -15,6 +17,7 @@ pub const Bus = struct {
             .ram = [_]u8{0} ** 2048,
             .cartridge = cartridge,
             .ppu = PPU.init(cartridge),
+            .apu = APU.init(),
             .controller1 = Controller.init(),
             .controller2 = Controller.init(),
         };
@@ -49,6 +52,7 @@ pub const Bus = struct {
         switch (addr) {
             0x0000...0x1FFF => self.ram[addr & 0x07FF] = value,
             0x2000...0x3FFF => self.ppu.writeRegister(@intCast(addr & 0x0007), value),
+            0x4000...0x4007 => self.apu.writePulse(@intCast(addr & 0x0007), value),
             0x4014 => self.performOamDma(value),
             0x4016 => self.controllerWrite(value),
             0x8000...0xFFFF => {},
