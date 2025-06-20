@@ -2,7 +2,9 @@ const std = @import("std");
 const APU = @import("../apu.zig").APU;
 
 test "APU init" {
-    const apu = APU.init();
+    const allocator = std.testing.allocator;
+    var apu = try APU.init(allocator);
+    defer apu.deinit();
 
     try std.testing.expectEqual(@as(u16, 0), apu.frame_counter.cycle);
     try std.testing.expectEqual(false, apu.frame_counter.frame_irq);
@@ -11,7 +13,9 @@ test "APU init" {
 }
 
 test "APU pulse channel write" {
-    var apu = APU.init();
+    const allocator = std.testing.allocator;
+    var apu = try APU.init(allocator);
+    defer apu.deinit();
 
     // Enable pulse 1
     apu.write(0x4015, 0x01);
@@ -31,7 +35,9 @@ test "APU pulse channel write" {
 }
 
 test "APU frame counter 4-step mode" {
-    var apu = APU.init();
+    const allocator = std.testing.allocator;
+    var apu = try APU.init(allocator);
+    defer apu.deinit();
 
     // Set 4-step mode
     apu.write(0x4017, 0x00);
@@ -45,7 +51,9 @@ test "APU frame counter 4-step mode" {
 }
 
 test "APU frame counter 5-step mode" {
-    var apu = APU.init();
+    const allocator = std.testing.allocator;
+    var apu = try APU.init(allocator);
+    defer apu.deinit();
 
     // Set 5-step mode
     apu.write(0x4017, 0x80);
@@ -54,7 +62,9 @@ test "APU frame counter 5-step mode" {
 }
 
 test "APU status register read" {
-    var apu = APU.init();
+    const allocator = std.testing.allocator;
+    var apu = try APU.init(allocator);
+    defer apu.deinit();
 
     // Enable channels and set length counters
     apu.write(0x4015, 0x03); // Enable pulse 1 and 2
@@ -66,7 +76,9 @@ test "APU status register read" {
 }
 
 test "APU envelope clock" {
-    var apu = APU.init();
+    const allocator = std.testing.allocator;
+    var apu = try APU.init(allocator);
+    defer apu.deinit();
 
     // Enable pulse 1
     apu.write(0x4015, 0x01);
@@ -81,7 +93,9 @@ test "APU envelope clock" {
 }
 
 test "APU length counter lookup" {
-    var apu = APU.init();
+    const allocator = std.testing.allocator;
+    var apu = try APU.init(allocator);
+    defer apu.deinit();
 
     // Test a few length counter values
     apu.write(0x4015, 0x01); // Enable pulse 1
@@ -96,7 +110,9 @@ test "APU length counter lookup" {
 }
 
 test "APU sweep unit" {
-    var apu = APU.init();
+    const allocator = std.testing.allocator;
+    var apu = try APU.init(allocator);
+    defer apu.deinit();
 
     // Enable pulse 1
     apu.write(0x4015, 0x01);
@@ -109,7 +125,9 @@ test "APU sweep unit" {
 }
 
 test "APU IRQ callback" {
-    var apu = APU.init();
+    const allocator = std.testing.allocator;
+    var apu = try APU.init(allocator);
+    defer apu.deinit();
 
     // We'll track IRQ state through the frame_irq flag instead
     // Set 4-step mode without IRQ inhibit

@@ -30,7 +30,8 @@ pub fn main() !void {
     var cartridge = try Cart.loadFromFile(allocator, buffer);
     defer cartridge.deinit(allocator);
 
-    var bus = Bus.init(&cartridge);
+    var bus = try Bus.init(&cartridge, allocator);
+    defer bus.deinit();
     var cpu = CPU.init(&bus);
 
     try stdout.print("Initial PC: 0x{X:0>4}\n", .{cpu.registers.pc});
@@ -38,6 +39,9 @@ pub fn main() !void {
     // Initialize SDL
     var sdl = try SDL.init("Nyxx NES Emulator", 2);
     defer sdl.deinit();
+    
+    // Connect APU to SDL for audio output
+    sdl.setAPU(&bus.apu);
 
     var fb = FrameBuffer{};
 
@@ -47,6 +51,9 @@ pub fn main() !void {
     var running = true;
     var frame_cycles: u32 = 0;
     const target_cycles = 29780;
+    var frame_count: u64 = 0;
+    var last_frame_time = std.time.milliTimestamp();
+    const frame_time_ms: i64 = 16; // ~60 FPS (16.67ms per frame)
 
     while (running) {
         // Execute CPU instruction
@@ -64,6 +71,10 @@ pub fn main() !void {
         // Check if frame is complete
         if (frame_cycles >= target_cycles) {
             frame_cycles -= target_cycles;
+            frame_count += 1;
+            
+            // Push audio samples to SDL once per frame
+            SDL.pushAudioSamples(&bus.apu);
 
             // Render frame to SDL
             try sdl.renderFrame(&fb);
@@ -78,6 +89,14 @@ pub fn main() !void {
                 bus.controller1.setFromState(input.controller1);
                 bus.controller2.setFromState(input.controller2);
             }
+            
+            // Frame rate limiting
+            const current_time = std.time.milliTimestamp();
+            const frame_duration = current_time - last_frame_time;
+            if (frame_duration < frame_time_ms) {
+                std.time.sleep(@as(u64, @intCast(frame_time_ms - frame_duration)) * 1_000_000);
+            }
+            last_frame_time = std.time.milliTimestamp();
         }
     }
 

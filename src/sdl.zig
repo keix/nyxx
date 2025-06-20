@@ -11,6 +11,13 @@ fn isHeadless() bool {
 }
 
 const FrameBuffer = @import("ppu.zig").FrameBuffer;
+const APU = @import("apu.zig").APU;
+
+// Global audio buffer for thread-safe communication
+var global_audio_buffer: [8192]f32 = [_]f32{0.0} ** 8192;  // Larger buffer
+var global_write_pos: usize = 0;
+var global_read_pos: usize = 0;
+var global_audio_mutex: std.Thread.Mutex = .{};
 
 // NES resolution
 const NES_WIDTH = 256;
@@ -51,12 +58,15 @@ pub const SDL = struct {
     texture: ?*c.SDL_Texture,
     scale: u8,
     input_state: InputState = .{},
+    audio_device: c.SDL_AudioDeviceID = 0,
+    apu: ?*APU = null,
 
     pub fn init(title: []const u8, scale: u8) !SDL {
         // Use dummy driver if headless
         if (isHeadless()) {
             std.log.info("Headless environment detected, using SDL dummy driver", .{});
             _ = c.SDL_SetHint(c.SDL_HINT_VIDEODRIVER, "dummy");
+            _ = c.SDL_SetHint(c.SDL_HINT_AUDIODRIVER, "dummy");
         }
 
         if (c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_AUDIO) != 0) {
@@ -108,15 +118,23 @@ pub const SDL = struct {
             return error.SDLTextureFailed;
         }
 
-        return SDL{
+        var sdl = SDL{
             .window = window,
             .renderer = renderer,
             .texture = texture,
             .scale = scale,
         };
+        
+        // Initialize audio device
+        try sdl.initAudio();
+        
+        return sdl;
     }
 
     pub fn deinit(self: *SDL) void {
+        if (self.audio_device != 0) {
+            c.SDL_CloseAudioDevice(self.audio_device);
+        }
         if (self.texture) |texture| c.SDL_DestroyTexture(texture);
         if (self.renderer) |renderer| c.SDL_DestroyRenderer(renderer);
         if (self.window) |window| c.SDL_DestroyWindow(window);
@@ -189,4 +207,150 @@ pub const SDL = struct {
 
         return self.input_state;
     }
+    
+    fn initAudio(self: *SDL) !void {
+        std.log.info("Initializing SDL audio device", .{});
+        
+        var desired_spec = c.SDL_AudioSpec{
+            .freq = 48000,
+            .format = c.AUDIO_F32SYS,
+            .channels = 1,
+            .silence = 0,
+            .samples = 1024,  // Larger buffer for smoother playback
+            .padding = 0,
+            .size = 0,
+            .callback = audioCallbackGlobal,  // Use global buffer callback
+            .userdata = null,  // No userdata needed
+        };
+        
+        var obtained_spec: c.SDL_AudioSpec = undefined;
+        
+        self.audio_device = c.SDL_OpenAudioDevice(
+            null,
+            0,
+            &desired_spec,
+            &obtained_spec,
+            0
+        );
+        
+        if (self.audio_device == 0) {
+            std.log.err("SDL_OpenAudioDevice failed: {s}", .{c.SDL_GetError()});
+            // Don't fail initialization - run without audio
+            std.log.warn("Running without audio", .{});
+        } else {
+            std.log.info("Audio device opened successfully", .{});
+            // Start audio playback immediately with silence
+            c.SDL_PauseAudioDevice(self.audio_device, 0);
+        }
+    }
+    
+    pub fn setAPU(self: *SDL, apu: *APU) void {
+        self.apu = apu;
+        
+        // Start audio playback if device is initialized
+        if (self.audio_device != 0) {
+            c.SDL_PauseAudioDevice(self.audio_device, 0);
+        }
+    }
+    
+    // Called from main thread to push audio samples
+    pub fn pushAudioSamples(apu: *APU) void {
+        global_audio_mutex.lock();
+        defer global_audio_mutex.unlock();
+        
+        // Check buffer space to avoid overrun
+        var samples_written: usize = 0;
+        const max_samples = 2048; // Limit samples per push to avoid flooding
+        
+        // Copy samples from APU to global buffer
+        while (samples_written < max_samples) {
+            const sample = apu.readAudioSample() orelse break;
+            
+            // Check if buffer is getting full
+            const next_write = (global_write_pos + 1) % global_audio_buffer.len;
+            if (next_write == global_read_pos) {
+                // Buffer full, drop sample to avoid overrun
+                break;
+            }
+            
+            global_audio_buffer[global_write_pos] = sample;
+            global_write_pos = next_write;
+            samples_written += 1;
+        }
+    }
 };
+
+// Simple audio callback that just outputs silence
+fn audioCallbackSimple(userdata: ?*anyopaque, stream: [*c]u8, len: c_int) callconv(.C) void {
+    _ = userdata;
+    // Just fill with silence
+    @memset(stream[0..@intCast(len)], 0);
+}
+
+// Audio callback using global buffer
+fn audioCallbackGlobal(userdata: ?*anyopaque, stream: [*c]u8, len: c_int) callconv(.C) void {
+    _ = userdata;
+    
+    const samples = @as([*]f32, @ptrCast(@alignCast(stream)));
+    const sample_count = @divExact(@as(usize, @intCast(len)), @sizeOf(f32));
+    
+    global_audio_mutex.lock();
+    defer global_audio_mutex.unlock();
+    
+    // Keep track of last sample for interpolation
+    var last_sample: f32 = 0.0;
+    
+    // Read from global buffer
+    for (0..sample_count) |i| {
+        if (global_read_pos != global_write_pos) {
+            const sample = global_audio_buffer[global_read_pos];
+            
+            // Simple low-pass filter to reduce pops
+            const filtered = last_sample * 0.1 + sample * 0.9;
+            samples[i] = filtered;
+            last_sample = filtered;
+            
+            global_read_pos = (global_read_pos + 1) % global_audio_buffer.len;
+        } else {
+            // Buffer underrun - fade to silence to avoid pops
+            const fade = last_sample * 0.95;
+            samples[i] = fade;
+            last_sample = fade;
+        }
+    }
+}
+
+fn audioCallback(userdata: ?*anyopaque, stream: [*c]u8, len: c_int) callconv(.C) void {
+    // Early return with silence if no userdata
+    if (userdata == null) {
+        @memset(stream[0..@intCast(len)], 0);
+        return;
+    }
+    
+    // Cast to SDL struct
+    const sdl_ptr = @as(?*SDL, @ptrCast(@alignCast(userdata)));
+    if (sdl_ptr == null) {
+        @memset(stream[0..@intCast(len)], 0);
+        return;
+    }
+    
+    const sdl = sdl_ptr.?;
+    
+    // Get sample buffer
+    const samples = @as([*]f32, @ptrCast(@alignCast(stream)));
+    const sample_count = @divExact(@as(usize, @intCast(len)), @sizeOf(f32));
+    
+    // Try to read from audio buffer if available
+    if (sdl.audio_buffer) |_| {
+        // Use a simple approach - just fill with zeros for now
+        // TODO: Implement proper audio generation
+        for (0..sample_count) |i| {
+            samples[i] = 0.0;
+        }
+    } else {
+        // No audio buffer, fill with silence
+        for (0..sample_count) |i| {
+            samples[i] = 0.0;
+        }
+    }
+}

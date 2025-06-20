@@ -12,16 +12,20 @@ pub const Bus = struct {
     controller1: Controller,
     controller2: Controller,
 
-    pub fn init(cartridge: *Cartridge) Bus {
+    pub fn init(cartridge: *Cartridge, allocator: std.mem.Allocator) !Bus {
         const bus = Bus{
             .ram = [_]u8{0} ** 2048,
             .cartridge = cartridge,
             .ppu = PPU.init(cartridge),
-            .apu = APU.init(),
+            .apu = try APU.init(allocator),
             .controller1 = Controller.init(),
             .controller2 = Controller.init(),
         };
         return bus;
+    }
+    
+    pub fn deinit(self: *Bus) void {
+        self.apu.deinit();
     }
 
     pub fn loadProgram(self: *Bus, program: []const u8, at: u16) void {
