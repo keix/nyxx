@@ -1,4 +1,4 @@
-# Nyxx – A 6502 Emulator in Zig
+# Nyxx – NES Emulator in Zig
 A minimal 6502 CPU emulator written in Zig.
 
 ## Overview
