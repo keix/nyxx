@@ -39,7 +39,7 @@ pub fn main() !void {
     // Initialize SDL
     var sdl = try SDL.init("Nyxx NES Emulator", 2);
     defer sdl.deinit();
-    
+
     // Connect APU to SDL for audio output
     sdl.setAPU(&bus.apu);
 
@@ -72,7 +72,7 @@ pub fn main() !void {
         if (frame_cycles >= target_cycles) {
             frame_cycles -= target_cycles;
             frame_count += 1;
-            
+
             // Push audio samples to SDL once per frame
             SDL.pushAudioSamples(&bus.apu);
 
@@ -89,7 +89,7 @@ pub fn main() !void {
                 bus.controller1.setFromState(input.controller1);
                 bus.controller2.setFromState(input.controller2);
             }
-            
+
             // Frame rate limiting
             const current_time = std.time.milliTimestamp();
             const frame_duration = current_time - last_frame_time;

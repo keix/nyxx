@@ -23,7 +23,7 @@ pub const Bus = struct {
         };
         return bus;
     }
-    
+
     pub fn deinit(self: *Bus) void {
         self.apu.deinit();
     }

@@ -1334,7 +1334,7 @@ test "AND all addressing modes consistency" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1351,7 +1351,7 @@ test "AND all addressing modes consistency" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0050, mask);
 
@@ -1370,7 +1370,7 @@ test "AND all addressing modes consistency" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0300, mask);
 
@@ -1392,7 +1392,7 @@ test "AND edge cases" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1410,7 +1410,7 @@ test "AND edge cases" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1429,7 +1429,7 @@ test "AND edge cases" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1693,7 +1693,7 @@ test "ORA edge cases" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1712,7 +1712,7 @@ test "ORA edge cases" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1976,7 +1976,7 @@ test "EOR bit manipulation patterns" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -1994,7 +1994,7 @@ test "EOR bit manipulation patterns" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -2022,7 +2022,7 @@ test "EOR all addressing modes consistency" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -2039,7 +2039,7 @@ test "EOR all addressing modes consistency" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0050, xor_mask);
 
@@ -2058,7 +2058,7 @@ test "EOR all addressing modes consistency" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0400, xor_mask);
 
@@ -2081,7 +2081,7 @@ test "EOR edge cases" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -2099,7 +2099,7 @@ test "EOR edge cases" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -2260,7 +2260,7 @@ test "CPX boundary values" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDX #$FF
@@ -2277,7 +2277,7 @@ test "CPX boundary values" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDX #$FF
@@ -2294,7 +2294,7 @@ test "CPX boundary values" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDX #$00
@@ -2315,7 +2315,7 @@ test "CPX cycles count" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDX
@@ -2329,7 +2329,7 @@ test "CPX cycles count" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0010, 0x42);
 
@@ -2344,7 +2344,7 @@ test "CPX cycles count" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x3000, 0x42);
 
@@ -2368,7 +2368,7 @@ test "CPX common usage patterns" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDX #$00
@@ -2544,7 +2544,7 @@ test "CPY boundary values" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDY #$FF
@@ -2561,7 +2561,7 @@ test "CPY boundary values" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDY #$FF
@@ -2578,7 +2578,7 @@ test "CPY boundary values" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDY #$00
@@ -2599,7 +2599,7 @@ test "CPY cycles count" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDY
@@ -2613,7 +2613,7 @@ test "CPY cycles count" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0010, 0x42);
 
@@ -2628,7 +2628,7 @@ test "CPY cycles count" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x3000, 0x42);
 
@@ -2652,7 +2652,7 @@ test "CPY common usage patterns" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDY #$00
@@ -2687,7 +2687,7 @@ test "CPY common usage patterns" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDY #$05
@@ -2847,7 +2847,7 @@ test "flag instructions cycle count" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         const cycles = cpu.step(); // SED
@@ -2860,7 +2860,7 @@ test "flag instructions cycle count" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         const cycles = cpu.step(); // CLD
@@ -2873,7 +2873,7 @@ test "flag instructions cycle count" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         const cycles = cpu.step(); // CLV
@@ -2943,7 +2943,7 @@ test "flag instructions in combination with arithmetic" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA #$7F
@@ -3346,7 +3346,7 @@ test "LSR cycle counts" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -3360,7 +3360,7 @@ test "LSR cycle counts" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0010, 0x02);
 
@@ -3374,7 +3374,7 @@ test "LSR cycle counts" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0015, 0x02);
 
@@ -3389,7 +3389,7 @@ test "LSR cycle counts" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x3000, 0x02);
 
@@ -3403,7 +3403,7 @@ test "LSR cycle counts" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x3002, 0x02);
 
@@ -3431,7 +3431,7 @@ test "LSR flag combinations" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -3652,7 +3652,7 @@ test "ASL cycle counts" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -3666,7 +3666,7 @@ test "ASL cycle counts" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0010, 0x01);
 
@@ -3680,7 +3680,7 @@ test "ASL cycle counts" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0013, 0x01);
 
@@ -3695,7 +3695,7 @@ test "ASL cycle counts" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0200, 0x01);
 
@@ -3709,7 +3709,7 @@ test "ASL cycle counts" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
         bus.write(0x0204, 0x01);
 
@@ -3737,7 +3737,7 @@ test "ASL flag combinations" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         _ = cpu.step(); // LDA
@@ -3951,7 +3951,7 @@ test "Rotate operations comprehensive" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         cpu.registers.flags.c = false;
@@ -3977,7 +3977,7 @@ test "Rotate operations comprehensive" {
         defer cartridge.deinit(allocator);
 
         var bus = try Bus.init(&cartridge, allocator);
-    defer bus.deinit();
+        defer bus.deinit();
         var cpu = CPU.init(&bus);
 
         cpu.registers.flags.c = false;
