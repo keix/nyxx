@@ -3,7 +3,7 @@ const Bus = @import("bus.zig").Bus;
 const CPU = @import("6502.zig").CPU;
 const Cartridge = @import("cartridge.zig").Cartridge;
 const FrameBuffer = @import("ppu.zig").FrameBuffer;
-const SDL = @import("sdl.zig").SDL;
+const SDLDevice = @import("devices/sdl.zig").Device;
 
 // NES timing constants
 const TARGET_CYCLES_PER_FRAME = 29780; // NTSC: ~29780 cycles per frame
@@ -14,7 +14,7 @@ pub const Nyxx = struct {
     bus: Bus,
     cpu: CPU,
     fb: FrameBuffer,
-    sdl: SDL,
+    device: SDLDevice,
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator, rom_data: []const u8) !*Nyxx {
@@ -28,8 +28,8 @@ pub const Nyxx = struct {
         self.cpu = CPU.init(&self.bus);
 
         self.fb = FrameBuffer{};
-        self.sdl = try SDL.init("Nyxx NES Emulator", 2);
-        self.sdl.setAPU(&self.bus.apu);
+        self.device = try SDLDevice.init(allocator, .{ .title = "Nyxx NES Emulator", .scale = 2 });
+        self.device.setAPU(&self.bus.apu);
 
         std.debug.print("Initial PC: 0x{X:0>4}\n", .{self.cpu.registers.pc});
 
@@ -37,7 +37,7 @@ pub const Nyxx = struct {
     }
 
     pub fn deinit(self: *Nyxx) void {
-        self.sdl.deinit();
+        self.device.deinit();
         self.bus.deinit();
         self.cartridge.deinit(self.allocator);
 
@@ -67,16 +67,15 @@ pub const Nyxx = struct {
                 frame_cycles -= TARGET_CYCLES_PER_FRAME;
                 frame_count += 1;
 
-                SDL.pushAudioSamples(&self.bus.apu);
-                try self.sdl.renderFrame(&self.fb);
+                self.device.pushAudioSamples(&self.bus.apu);
+                try self.device.renderFrame(&self.fb);
 
-                if (self.sdl.pollInput()) |input| {
-                    if (input.quit) {
-                        running = false;
-                    }
-                    self.bus.controller1.setFromState(input.controller1);
-                    self.bus.controller2.setFromState(input.controller2);
+                const input = self.device.pollInput();
+                if (input.quit) {
+                    running = false;
                 }
+                self.bus.controller1.setFromState(input.controller1);
+                self.bus.controller2.setFromState(input.controller2);
 
                 const current_time = std.time.milliTimestamp();
                 const frame_duration = current_time - last_frame_time;
