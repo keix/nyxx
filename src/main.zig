@@ -2,14 +2,12 @@ const std = @import("std");
 const Nyxx = @import("nyxx.zig").Nyxx;
 
 pub fn main() !void {
-    const stdout = std.io.getStdOut().writer();
     const allocator = std.heap.page_allocator;
-
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
     if (args.len < 2) {
-        try stdout.print("Usage: {s} $ROM_FILE_PATH\n", .{args[0]});
+        std.debug.print("Usage: {s} $ROM_FILE_PATH\n", .{args[0]});
         return error.InvalidArgument;
     }
 
@@ -23,5 +21,8 @@ pub fn main() !void {
 
     _ = try file.readAll(buffer);
 
-    try Nyxx.initAndRun(allocator, buffer);
+    var nyxx = try Nyxx.init(allocator, buffer);
+    defer nyxx.deinit();
+
+    try nyxx.run();
 }
