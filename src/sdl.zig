@@ -5,6 +5,11 @@ const c = @cImport({
 
 const FrameBuffer = @import("ppu.zig").FrameBuffer;
 const APU = @import("apu.zig").APU;
+const devices = @import("devices.zig");
+
+// Re-export types for backward compatibility
+pub const InputState = devices.InputState;
+pub const ControllerState = devices.ControllerState;
 
 // Global audio buffer for thread-safe communication
 var global_audio_buffer: [8192]f32 = [_]f32{0.0} ** 8192; // Larger buffer
@@ -28,22 +33,6 @@ pub const NES_PALETTE = [_]u32{
     0xF8D878, 0xD8F878, 0xB8F8B8, 0xB8F8D8, 0x00FCFC, 0xF8D8F8, 0x000000, 0x000000,
 };
 
-pub const InputState = struct {
-    quit: bool = false,
-    controller1: ControllerState = .{},
-    controller2: ControllerState = .{},
-};
-
-pub const ControllerState = packed struct {
-    a: bool = false,
-    b: bool = false,
-    select: bool = false,
-    start: bool = false,
-    up: bool = false,
-    down: bool = false,
-    left: bool = false,
-    right: bool = false,
-};
 
 pub const SDL = struct {
     window: ?*c.SDL_Window,

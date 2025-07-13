@@ -2,38 +2,22 @@ const std = @import("std");
 const Bus = @import("bus.zig").Bus;
 const Opcode = @import("opcode.zig");
 
-const Flags = struct {
-    n: bool = false, // Negative
-    v: bool = false, // Overflow
-    b: bool = false, // Break
-    d: bool = false, // Decimal (unused in NES)
-    i: bool = false, // Interrupt Disable
-    z: bool = false, // Zero
+const Flags = packed struct {
     c: bool = false, // Carry
+    z: bool = false, // Zero
+    i: bool = false, // Interrupt Disable
+    d: bool = false, // Decimal (unused in NES)
+    b: bool = false, // Break
+    _: bool = true, // Bit 5 is always set in NES
+    v: bool = false, // Overflow
+    n: bool = false, // Negative
 
     pub fn toByte(self: Flags) u8 {
-        // Convert the flags to a byte representation
-        return (@as(u8, @intFromBool(self.c)) << 0) |
-            (@as(u8, @intFromBool(self.z)) << 1) |
-            (@as(u8, @intFromBool(self.i)) << 2) |
-            (@as(u8, @intFromBool(self.d)) << 3) |
-            (@as(u8, @intFromBool(self.b)) << 4) |
-            (0b00100000) | // bit 5 always set
-            (@as(u8, @intFromBool(self.v)) << 6) |
-            (@as(u8, @intFromBool(self.n)) << 7);
+        return @bitCast(self);
     }
 
     pub fn fromByte(byte: u8) Flags {
-        // Convert a byte representation back to flags
-        return Flags{
-            .c = (byte & 0x01) != 0, // Carry flag
-            .z = (byte & 0x02) != 0, // Zero flag
-            .i = (byte & 0x04) != 0, // Interrupt flag
-            .d = (byte & 0x08) != 0, // Decimal flag is not used in NES
-            .b = false, // Break flag is not used in NES
-            .v = (byte & 0x40) != 0, // Overflow flag
-            .n = (byte & 0x80) != 0, // Negative flag
-        };
+        return @bitCast(byte);
     }
 };
 

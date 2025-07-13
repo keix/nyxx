@@ -27,10 +27,10 @@ const CYCLES_PER_SAMPLE = @as(f32, @floatFromInt(CPU_FREQ)) / @as(f32, @floatFro
 
 // Duty cycle sequences for pulse channels
 const DUTY_CYCLES = [4][8]bool{
-    [8]bool{ false, true, false, false, false, false, false, false },  // 12.5%
-    [8]bool{ false, true, true, false, false, false, false, false },   // 25%
-    [8]bool{ false, true, true, true, true, false, false, false },     // 50%
-    [8]bool{ true, false, false, true, true, true, true, true },       // 25% negated
+    [8]bool{ false, true, false, false, false, false, false, false }, // 12.5%
+    [8]bool{ false, true, true, false, false, false, false, false }, // 25%
+    [8]bool{ false, true, true, true, true, false, false, false }, // 50%
+    [8]bool{ true, false, false, true, true, true, true, true }, // 25% negated
 };
 
 const Sweep = packed struct { shift: u3, negate: bool, period: u3, enabled: bool };
@@ -52,10 +52,10 @@ const Pulse = struct {
     sweep_reload: bool = false,
     timer_value: u11 = 0,
     enabled: bool = false,
-    
+
     // Sequencer for wave generation
-    timer: u16 = 0,  // Current timer value (counts down)
-    sequencer_pos: u3 = 0,  // Position in duty cycle (0-7)
+    timer: u16 = 0, // Current timer value (counts down)
+    sequencer_pos: u3 = 0, // Position in duty cycle (0-7)
 
     pub fn write(self: *Pulse, offset: u2, val: u8) void {
         switch (offset) {
@@ -101,7 +101,7 @@ const Pulse = struct {
         self.timer_hi.timer = @intCast((timer >> 8) & 0x7);
         self.timer_value = timer;
     }
-    
+
     pub fn clock(self: *Pulse) void {
         // Clock the timer at CPU rate
         if (self.timer == 0) {
@@ -112,22 +112,22 @@ const Pulse = struct {
             self.timer -= 1;
         }
     }
-    
+
     pub fn getOutput(self: *const Pulse) u4 {
         // Check if channel should output
         if (!self.enabled or self.length_counter == 0 or self.timer_value < 8) {
             return 0;
         }
-        
+
         // Get current volume
         const volume = if (self.ctrl.constant) self.ctrl.volume else self.envelope_decay;
-        
+
         // Check duty cycle
         const output = DUTY_CYCLES[self.ctrl.duty][self.sequencer_pos];
-        
+
         return if (output) volume else 0;
     }
-    
+
     pub fn getFrequency(self: *const Pulse) f32 {
         // Calculate actual frequency output
         // f = CPU_FREQ / (16 * (t + 1))
@@ -136,7 +136,6 @@ const Pulse = struct {
         return @as(f32, @floatFromInt(CPU_FREQ)) / (16.0 * @as(f32, @floatFromInt(self.timer_value + 1)));
     }
 };
-
 
 const FrameCounterMode = enum(u1) {
     four_step = 0,
@@ -164,9 +163,9 @@ pub const APU = struct {
 
     // IRQ callback
     irq_callback: ?*const fn () void = null,
-    
+
     // Audio generation
-    audio_samples: [16384]f32 = [_]f32{0.0} ** 16384,  // Larger buffer to prevent underruns
+    audio_samples: [16384]f32 = [_]f32{0.0} ** 16384, // Larger buffer to prevent underruns
     audio_write_pos: usize = 0,
     audio_read_pos: usize = 0,
     sample_timer: f32 = 0,
@@ -178,13 +177,13 @@ pub const APU = struct {
         var apu = APU{
             .allocator = allocator,
         };
-        
+
         // Audio is now using internal buffer
         apu.audio_enabled = true;
-        
+
         return apu;
     }
-    
+
     pub fn deinit(self: *APU) void {
         _ = self;
         // Nothing to deallocate with fixed-size buffer
@@ -196,7 +195,7 @@ pub const APU = struct {
             self.pulse1.clock();
             self.pulse2.clock();
         }
-        
+
         // Generate audio samples based on CPU cycles
         if (self.audio_enabled) {
             self.sample_timer += @as(f32, @floatFromInt(cpu_cycles));
@@ -205,13 +204,13 @@ pub const APU = struct {
                 self.generateSample();
             }
         }
-        
+
         // APU runs at half CPU speed - accumulate pending cycles
         self.cpu_cycles_pending += cpu_cycles;
 
         while (self.cpu_cycles_pending >= 2) {
             self.cpu_cycles_pending -= 2;
-            
+
             // Don't clock sequencers here - they run at CPU rate
 
             // Handle frame counter reset delay
@@ -234,38 +233,38 @@ pub const APU = struct {
             self.processFrameCounterEvents();
         }
     }
-    
+
     fn generateSample(self: *APU) void {
         // Get raw outputs from channels
         const pulse1_out = @as(f32, @floatFromInt(self.pulse1.getOutput()));
         const pulse2_out = @as(f32, @floatFromInt(self.pulse2.getOutput()));
-        
+
         // Use NES-style mixing (approximate)
         // Pulse mixing: pulse_out = 95.88 / ((8128 / (pulse1 + pulse2)) + 100)
         const pulse_sum = pulse1_out + pulse2_out;
         var pulse_mixed: f32 = 0.0;
-        
+
         if (pulse_sum > 0) {
             pulse_mixed = 95.88 / ((8128.0 / pulse_sum) + 100.0);
         }
-        
+
         // Scale to audio range (NES output is typically 0-1, center at 0.5)
         // Apply DC offset removal and scale to [-1, 1]
         const sample = pulse_mixed * 2.0 - 0.5;
-        
+
         // Apply simple high-pass filter to remove DC offset
         const filtered_sample = std.math.clamp(sample, -1.0, 1.0);
-        
+
         // Write to internal buffer
         self.audio_samples[self.audio_write_pos] = filtered_sample;
         self.audio_write_pos = (self.audio_write_pos + 1) % self.audio_samples.len;
     }
-    
+
     pub fn readAudioSample(self: *APU) ?f32 {
         if (self.audio_read_pos == self.audio_write_pos) {
             return null;
         }
-        
+
         const sample = self.audio_samples[self.audio_read_pos];
         self.audio_read_pos = (self.audio_read_pos + 1) % self.audio_samples.len;
         return sample;
