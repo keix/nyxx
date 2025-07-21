@@ -7,7 +7,6 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     if (args.len < 2) {
-        std.debug.print("Usage: {s} $ROM_FILE_PATH\n", .{args[0]});
         return error.InvalidArgument;
     }
 
@@ -16,7 +15,7 @@ pub fn main() !void {
     defer file.close();
 
     const file_size = try file.getEndPos();
-    const buffer = try allocator.alloc(u8, file_size);
+    const buffer = try allocator.alloc(u8, @intCast(file_size));
     defer allocator.free(buffer);
 
     _ = try file.readAll(buffer);

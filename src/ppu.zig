@@ -1,8 +1,9 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Bus = @import("bus.zig").Bus;
 const Cartridge = @import("cartridge.zig").Cartridge;
 const Mirroring = @import("cartridge.zig").Mirroring;
-const sdl = @import("sdl.zig");
+const nes_palette = @import("palette.zig");
 
 const VISIBLE_SCANLINES = 240;
 const CYCLES_PER_SCANLINE = 341;
@@ -25,6 +26,10 @@ pub const FrameBuffer = struct {
     }
 
     pub fn writePPM(self: *const FrameBuffer, filename: []const u8) !void {
+        if (builtin.target.cpu.arch == .wasm32) {
+            return error.NotSupportedOnWasm;
+        }
+
         var file = try std.fs.cwd().createFile(filename, .{});
         defer file.close();
 
@@ -344,7 +349,7 @@ const OpenBusDecay = struct {
         }
     }
 
-    pub fn refresh_bits(self: *OpenBusDecay, value: u8, mask: u8) void {
+    pub fn refreshBits(self: *OpenBusDecay, value: u8, mask: u8) void {
         // Refresh specific bits and reset their timers
         self.data = (self.data & ~mask) | (value & mask);
 
@@ -388,18 +393,6 @@ pub const PPU = struct {
     open_bus: OpenBusDecay = .{}, // Open bus with proper decay
     dma_active: bool = false,
     secondary_oam: SecondaryOAM = .{},
-
-    pub fn dumpNameTable(self: *PPU) void {
-        const start = 0x2000;
-        const end = 0x23C0;
-        for (start..end) |addr| {
-            if ((addr - start) % 32 == 0) {
-                std.debug.print("\n0x{X:04}: ", .{addr});
-            }
-            std.debug.print("{X:02} ", .{self.vram.memory[addr]});
-        }
-        std.debug.print("\n", .{});
-    }
 
     pub fn init(cartridge: *Cartridge) PPU {
         return PPU{
@@ -675,7 +668,7 @@ pub const PPU = struct {
 
         // Get final color from palette
         const palette_index = self.vram.readPalette(final_palette_addr) & 0x3F;
-        const color = sdl.NES_PALETTE[palette_index];
+        const color = nes_palette.NES_PALETTE[palette_index];
 
         fb.setPixel(@intCast(x), @intCast(y), color);
     }
@@ -751,7 +744,6 @@ pub const PPU = struct {
 
         if (addr < 0x2000) {
             self.cartridge.writeCHR(addr, value);
-            // return; // CHR ROM/RAM write
         } else if (addr >= 0x2000 and addr < 0x3F00) {
             self.vram.write(addr, value);
         } else if (addr >= 0x3F00 and addr < 0x4000) {
@@ -780,7 +772,7 @@ pub const PPU = struct {
             const palette = self.vram.readPalette(addr);
             // Keep high 2 bits from open bus, refresh low 6 bits
             result = (self.open_bus.read() & 0b1100_0000) | (palette & 0b0011_1111);
-            self.open_bus.refresh_bits(palette, 0b0011_1111); // Only refresh low 6 bits
+            self.open_bus.refreshBits(palette, 0b0011_1111); // Only refresh low 6 bits
         }
 
         self.incrementVRAMAddress();
@@ -799,7 +791,7 @@ pub const PPU = struct {
         const result = high3 | low5;
 
         // Only refresh the high 3 bits
-        self.open_bus.refresh_bits(high3, 0b1110_0000);
+        self.open_bus.refreshBits(high3, 0b1110_0000);
         self.registers.scroll_unit.resetLatch();
         self.registers.status.vblank = false;
 
