@@ -1,9 +1,19 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Bus = @import("bus.zig").Bus;
 const CPU = @import("6502.zig").CPU;
 const Cartridge = @import("cartridge.zig").Cartridge;
 const FrameBuffer = @import("ppu.zig").FrameBuffer;
+
 const SDLDevice = @import("devices/sdl.zig").Device;
+const WebGLDevice = @import("devices/webgl.zig").Device;
+
+const DeviceType = if (builtin.target.cpu.arch == .wasm32 and builtin.target.os.tag != .wasi)
+    WebGLDevice
+else if (builtin.target.os.tag == .wasi)
+    WebGLDevice
+else
+    SDLDevice;
 
 // NES timing constants
 const TARGET_CYCLES_PER_FRAME = 29780; // NTSC: ~29780 cycles per frame
@@ -14,7 +24,7 @@ pub const Nyxx = struct {
     bus: Bus,
     cpu: CPU,
     fb: FrameBuffer,
-    device: SDLDevice,
+    device: DeviceType,
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator, rom_data: []const u8) !*Nyxx {
@@ -28,10 +38,8 @@ pub const Nyxx = struct {
         self.cpu = CPU.init(&self.bus);
 
         self.fb = FrameBuffer{};
-        self.device = try SDLDevice.init(allocator, .{ .title = "Nyxx NES Emulator", .scale = 2 });
+        self.device = try DeviceType.init(allocator, .{ .title = "Nyxx NES Emulator", .scale = 2 });
         self.device.setAPU(&self.bus.apu);
-
-        std.debug.print("Initial PC: 0x{X:0>4}\n", .{self.cpu.registers.pc});
 
         return self;
     }
@@ -46,12 +54,10 @@ pub const Nyxx = struct {
     }
 
     pub fn run(self: *Nyxx) !void {
-        std.debug.print("Starting execution...\n", .{});
-
         var running = true;
         var frame_cycles: u32 = 0;
         var frame_count: u64 = 0;
-        var last_frame_time = std.time.milliTimestamp();
+        var last_frame_time: i64 = if (builtin.target.cpu.arch != .wasm32) std.time.milliTimestamp() else 0;
 
         while (running) {
             const cycles = self.cpu.step();
@@ -77,15 +83,15 @@ pub const Nyxx = struct {
                 self.bus.controller1.setFromState(input.controller1);
                 self.bus.controller2.setFromState(input.controller2);
 
-                const current_time = std.time.milliTimestamp();
-                const frame_duration = current_time - last_frame_time;
-                if (frame_duration < FRAME_TIME_MS) {
-                    std.time.sleep(@as(u64, @intCast(FRAME_TIME_MS - frame_duration)) * 1_000_000);
+                if (builtin.target.cpu.arch != .wasm32) {
+                    const current_time = std.time.milliTimestamp();
+                    const frame_duration = current_time - last_frame_time;
+                    if (frame_duration < FRAME_TIME_MS) {
+                        std.time.sleep(@as(u64, @intCast(FRAME_TIME_MS - frame_duration)) * 1_000_000);
+                    }
+                    last_frame_time = std.time.milliTimestamp();
                 }
-                last_frame_time = std.time.milliTimestamp();
             }
         }
-
-        std.debug.print("Emulation stopped.\n", .{});
     }
 };

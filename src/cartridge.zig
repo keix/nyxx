@@ -46,9 +46,6 @@ pub const Cartridge = struct {
         std.mem.copyForwards(u8, prg_rom, rom_file[prg_start .. prg_start + prg_size]);
         std.mem.copyForwards(u8, chr_rom, rom_file[chr_start .. chr_start + chr_size]);
 
-        std.debug.print("PRG ROM size: {}\n", .{prg_rom.len});
-        std.debug.print("CHR ROM size: {}\n", .{chr_rom.len});
-
         const reset_vector = blk: {
             if (prg_size >= 0x8000) {
                 // 32KB: $FFFC-$FFFD prg_rom[0x7FFC-0x7FFD]
@@ -62,33 +59,6 @@ pub const Cartridge = struct {
                 break :blk @as(u16, low) | (@as(u16, high) << 8);
             }
         };
-
-        const tile_index: usize = 0x24;
-        const start = tile_index * 16;
-
-        var i: usize = 0;
-        while (i < 16) : (i += 1) {
-            if (chr_rom.len > 0)
-                std.debug.print("  byte[{}] = 0x{X:02}\n", .{ i, chr_rom[start + i] });
-        }
-
-        if (chr_rom.len > start + 15) {
-            for (0..8) |row| {
-                const plane0 = chr_rom[start + row];
-                const plane1 = chr_rom[start + 8 + row];
-
-                std.debug.print("Row {d:2}: ", .{row});
-                for (0..8) |bit| {
-                    const bit_index: u3 = @intCast(7 - bit);
-                    const low = (plane0 >> bit_index) & 1;
-                    const high = (plane1 >> bit_index) & 1;
-                    const color_index = (high << 1) | low;
-                    std.debug.print("{d}", .{color_index});
-                }
-
-                std.debug.print("\n", .{});
-            }
-        }
 
         const mirroring = if ((header[6] & 0x01) != 0) Mirroring.Vertical else Mirroring.Horizontal;
         return Cartridge{
@@ -132,7 +102,7 @@ pub const Cartridge = struct {
             if (offset < self.chr_ram.len) {
                 self.chr_ram[offset] = value;
             } else {
-                std.debug.print("Attempted to write to CHR RAM out of bounds: 0x{X:04}\n", .{addr});
+                // std.debug.print("Attempted to write to CHR RAM out of bounds: 0x{X:04}\n", .{addr});
             }
         }
     }
@@ -150,7 +120,7 @@ pub const Cartridge = struct {
                 if (offset < self.chr_ram.len) {
                     return self.chr_ram[offset];
                 } else {
-                    std.debug.print("Attempted to read from CHR RAM out of bounds: 0x{X:04}\n", .{addr});
+                    // std.debug.print("Attempted to read from CHR RAM out of bounds: 0x{X:04}\n", .{addr});
                 }
             }
         }
