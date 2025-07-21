@@ -53,4 +53,21 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+
+    // WASM build step
+    const wasm_step = b.step("wasm", "Build WASM with explicit exports");
+
+    const wasm_cmd = b.addSystemCommand(&.{
+        "zig",                    "build-exe",               "src/main_wasm.zig",
+        "-target",                "wasm32-freestanding",     "-O",
+        "ReleaseSmall",           "-fno-entry",              "--export=init",
+        "--export=start",         "--export=step",           "--export=getFrameBufferPtr",
+        "--export=getFrameWidth", "--export=getFrameHeight", "--export=setButtonState",
+        "--export=deinit",        "--name",                  "nyxx",
+    });
+
+    // Install the built WASM file
+    wasm_cmd.addArg("-femit-bin=zig-out/bin/nyxx.wasm");
+
+    wasm_step.dependOn(&wasm_cmd.step);
 }
