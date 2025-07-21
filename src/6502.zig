@@ -1,4 +1,4 @@
-const std = @import("std");
+// const std = @import("std");
 const Bus = @import("bus.zig").Bus;
 const Opcode = @import("opcode.zig");
 
@@ -196,7 +196,7 @@ pub const CPU = struct {
             .DCP => self.opDcp(instr.addressing_mode),
             .ISB => self.opIsb(instr.addressing_mode),
             else => {
-                std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
+                // std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
             },
         }
     }
@@ -372,17 +372,14 @@ pub const CPU = struct {
                 self.page_crossed = (base & 0xFF00) != (addr & 0xFF00);
                 break :blk addr;
             },
-            else => {
-                std.debug.print("PANIC: Unexpected AddressingMode for RMW: {}\n", .{mode});
-                @panic("getAddressForRMW: unexpected AddressingMode");
-            },
+            else => unreachable,
         };
     }
 
     inline fn peekStack(self: *CPU, offset: u8) u8 {
         const addr = 0x0100 + @as(u16, self.registers.s) + @as(u16, offset);
         if (addr > 0x01FF) {
-            @panic("Stack peek out of bounds");
+            unreachable;
         }
         return self.readMemory(addr);
     }
