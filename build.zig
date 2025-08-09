@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "nyxx",
-        .root_source_file = if (is_wasm) b.path("src/main_wasm.zig") else b.path("src/main.zig"),
+        .root_source_file = if (is_wasm) b.path("src/_wasm.zig") else b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -58,7 +58,7 @@ pub fn build(b: *std.Build) void {
     const wasm_step = b.step("wasm", "Build WASM with explicit exports");
 
     const wasm_cmd = b.addSystemCommand(&.{
-        "zig",                    "build-exe",               "src/main_wasm.zig",
+        "zig",                    "build-exe",               "src/wasm.zig",
         "-target",                "wasm32-freestanding",     "-O",
         "ReleaseSmall",           "-fno-entry",              "--export=init",
         "--export=start",         "--export=step",           "--export=getFrameBufferPtr",
