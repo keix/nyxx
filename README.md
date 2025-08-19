@@ -33,7 +33,7 @@ zig build
 ```
 
 ### WASM (WebGL frontend)
-To compile for the web:
+To compile for the web frontend:
 
 ```bash
 zig build wasm
