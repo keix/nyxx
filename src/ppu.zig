@@ -68,7 +68,6 @@ pub const VRAM = struct {
             return self.memory[mirrored];
         }
 
-        // return self.memory[resolved_addr];
         std.debug.panic("VRAM read invalid address: 0x{X}", .{addr});
     }
 
@@ -404,10 +403,10 @@ pub const PPU = struct {
             .frame = 0,
             .cartridge = cartridge,
         };
-        
+
         // Set initial VBlank state to help with ROM initialization
         ppu.registers.status.vblank = true;
-        
+
         return ppu;
     }
 
@@ -495,7 +494,7 @@ pub const PPU = struct {
     }
 
     const BackgroundPixelResult = struct { color_index: u2, palette_index: u8 };
-    
+
     fn renderBackgroundPixel(self: *PPU, _: u16, _: u16) BackgroundPixelResult {
         var bg_color_index: u2 = 0;
         var bg_palette_index: u8 = 0;
@@ -556,7 +555,7 @@ pub const PPU = struct {
     }
 
     const SpritePixelResult = struct { color_index: u2, palette_index: u8, priority: u1, is_sprite_zero: bool };
-    
+
     fn renderSpritePixel(self: *PPU, x: u16, y: u16) SpritePixelResult {
         var sprite_color_index: u2 = 0;
         var sprite_palette_index: u8 = 0;
@@ -625,12 +624,7 @@ pub const PPU = struct {
             }
         }
 
-        return .{ 
-            .color_index = sprite_color_index, 
-            .palette_index = sprite_palette_index, 
-            .priority = sprite_priority, 
-            .is_sprite_zero = sprite_is_zero 
-        };
+        return .{ .color_index = sprite_color_index, .palette_index = sprite_palette_index, .priority = sprite_priority, .is_sprite_zero = sprite_is_zero };
     }
 
     fn checkSprite0Hit(self: *PPU, x: u16, bg_color: u2, sprite_color: u2, sprite_is_zero: bool) void {
@@ -643,7 +637,7 @@ pub const PPU = struct {
     }
 
     const PriorityResult = struct { palette_addr: u16 };
-    
+
     fn resolvePixelPriority(bg_color: u2, bg_palette: u8, sprite_color: u2, sprite_palette: u8, sprite_priority: u1) PriorityResult {
         var final_palette_addr: u16 = 0;
 
@@ -693,13 +687,7 @@ pub const PPU = struct {
         self.checkSprite0Hit(x, bg.color_index, sprite.color_index, sprite.is_sprite_zero);
 
         // Priority resolution
-        const priority = resolvePixelPriority(
-            bg.color_index,
-            bg.palette_index,
-            sprite.color_index,
-            sprite.palette_index,
-            sprite.priority
-        );
+        const priority = resolvePixelPriority(bg.color_index, bg.palette_index, sprite.color_index, sprite.palette_index, sprite.priority);
 
         // Get final color from palette
         const palette_index = self.vram.readPalette(priority.palette_addr) & 0x3F;

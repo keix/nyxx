@@ -38,6 +38,7 @@ pub const Bus = struct {
     }
 
     pub fn read(self: *Bus, addr: u16) u8 {
+        // TODO: Handle open bus correctly during DMA
         if (self.ppu.dma_active and addr == 0x2007) {
             return self.ppu.open_bus.read();
         }
