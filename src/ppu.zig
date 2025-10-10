@@ -395,7 +395,7 @@ pub const PPU = struct {
     secondary_oam: SecondaryOAM = .{},
 
     pub fn init(cartridge: *Cartridge) PPU {
-        return PPU{
+        var ppu = PPU{
             .registers = .{},
             .vram = VRAM.init(cartridge.mirroring),
             ._vblank_injected = false,
@@ -404,6 +404,11 @@ pub const PPU = struct {
             .frame = 0,
             .cartridge = cartridge,
         };
+        
+        // Set initial VBlank state to help with ROM initialization
+        ppu.registers.status.vblank = true;
+        
+        return ppu;
     }
 
     pub fn step(self: *PPU, fb: *FrameBuffer) !void {
@@ -489,185 +494,215 @@ pub const PPU = struct {
         return self.scanline == -1 and self.cycle == 0;
     }
 
-    pub fn renderPixel(self: *PPU, fb: *FrameBuffer) !void {
-        // if (self.cartridge.chr_rom.len == 0) return;
+    const BackgroundPixelResult = struct { color_index: u2, palette_index: u8 };
+    
+    fn renderBackgroundPixel(self: *PPU, _: u16, _: u16) BackgroundPixelResult {
+        var bg_color_index: u2 = 0;
+        var bg_palette_index: u8 = 0;
 
+        // Get the current VRAM address (includes scroll information)
+        const v = self.registers.scroll_unit.v.read();
+
+        // Extract scroll components from v register
+        const coarse_x = v & 0x1F;
+        const coarse_y = (v >> 5) & 0x1F;
+        const nametable_x = (v >> 10) & 0x01;
+        const nametable_y = (v >> 11) & 0x01;
+        const fine_y = (v >> 12) & 0x07;
+
+        // Calculate tile coordinates
+        const tile_x = coarse_x;
+        const tile_y = coarse_y;
+
+        // Get nametable base address
+        const nametable_select = (nametable_y << 1) | nametable_x;
+        const nametable_base = 0x2000 + @as(u16, nametable_select) * 0x400;
+
+        const name_table_index = tile_y * 32 + tile_x;
+        const tile_id = self.vram.read(nametable_base + name_table_index);
+
+        // Calculate pixel position within the tile
+        const pixel_x: u3 = @intCast((self.cycle - 1) & 0x07);
+        const pixel_y: u3 = @intCast(fine_y);
+
+        const bg_table_addr: usize = if (self.registers.ctrl.background_table == 0) 0x0000 else 0x1000;
+        const chr_index = bg_table_addr + @as(usize, tile_id) * 16;
+
+        // Bounds check for CHR ROM access
+        if (chr_index + 8 + pixel_y < self.cartridge.chr_rom.len) {
+            const plane0 = self.cartridge.chr_rom[chr_index + pixel_y];
+            const plane1 = self.cartridge.chr_rom[chr_index + 8 + pixel_y];
+
+            const bit_index: u3 = 7 - pixel_x;
+            const bit0 = (plane0 >> bit_index) & 1;
+            const bit1 = (plane1 >> bit_index) & 1;
+            bg_color_index = @intCast((bit1 << 1) | bit0);
+
+            // Get attribute byte for palette selection
+            const attr_x = tile_x / 4;
+            const attr_y = tile_y / 4;
+            const attr_index = attr_y * 8 + attr_x;
+            const attr_addr = nametable_base + 0x03C0 + @as(u16, attr_index);
+            const attr_byte = self.vram.read(attr_addr);
+
+            const quad_x = (tile_x % 4) / 2;
+            const quad_y = (tile_y % 4) / 2;
+            const shift: u3 = @intCast((quad_y * 2 + quad_x) * 2);
+            const palette_number = (attr_byte >> shift) & 0b11;
+            bg_palette_index = @intCast(palette_number);
+        }
+
+        return .{ .color_index = bg_color_index, .palette_index = bg_palette_index };
+    }
+
+    const SpritePixelResult = struct { color_index: u2, palette_index: u8, priority: u1, is_sprite_zero: bool };
+    
+    fn renderSpritePixel(self: *PPU, x: u16, y: u16) SpritePixelResult {
+        var sprite_color_index: u2 = 0;
+        var sprite_palette_index: u8 = 0;
+        var sprite_priority: u1 = 0;
+        var sprite_is_zero = false;
+
+        // Check each sprite in secondary OAM
+        for (0..self.secondary_oam.count) |i| {
+            const sprite = self.secondary_oam.sprites[i];
+            const sprite_index = self.secondary_oam.sprite_indices[i];
+
+            // Check if sprite covers this pixel
+            const sprite_end_x = sprite.x +% 8;
+            const sprite_visible = if (sprite_end_x > sprite.x)
+                (x >= sprite.x and x < sprite_end_x)
+            else
+                (x >= sprite.x or x < sprite_end_x); // Sprite wraps around screen
+
+            if (sprite_visible) {
+                // In NES, sprite Y is the actual Y coordinate minus 1
+                const sprite_y_actual = sprite.y +% 1;
+
+                // Check if current scanline is within sprite bounds
+                if (y < sprite_y_actual or y >= sprite_y_actual +% 8) continue;
+
+                const sprite_pixel_x_temp = x -% sprite.x;
+                const sprite_pixel_y_temp = y -% sprite_y_actual;
+
+                // Ensure values are within valid range
+                if (sprite_pixel_x_temp >= 8 or sprite_pixel_y_temp >= 8) continue;
+
+                var sprite_pixel_x: u3 = @intCast(sprite_pixel_x_temp);
+                var sprite_pixel_y: u3 = @intCast(sprite_pixel_y_temp);
+
+                // Apply horizontal flip
+                if (sprite.attributes.flip_h == 1) {
+                    sprite_pixel_x = 7 - sprite_pixel_x;
+                }
+
+                // Apply vertical flip
+                if (sprite.attributes.flip_v == 1) {
+                    sprite_pixel_y = 7 - sprite_pixel_y;
+                }
+
+                const sprite_table_addr: usize = if (self.registers.ctrl.sprite_table == 0) 0x0000 else 0x1000;
+                const sprite_chr_index = sprite_table_addr + @as(usize, sprite.tile_index) * 16;
+
+                // Bounds check for sprite CHR ROM access
+                if (sprite_chr_index + 8 + sprite_pixel_y < self.cartridge.chr_rom.len) {
+                    const sprite_plane0 = self.cartridge.chr_rom[sprite_chr_index + sprite_pixel_y];
+                    const sprite_plane1 = self.cartridge.chr_rom[sprite_chr_index + 8 + sprite_pixel_y];
+
+                    const sprite_bit_index: u3 = 7 - sprite_pixel_x;
+                    const sbit0 = (sprite_plane0 >> sprite_bit_index) & 1;
+                    const sbit1 = (sprite_plane1 >> sprite_bit_index) & 1;
+                    const color = @as(u2, @intCast((sbit1 << 1) | sbit0));
+
+                    // If pixel is not transparent, use this sprite
+                    if (color != 0 and sprite_color_index == 0) {
+                        sprite_color_index = color;
+                        sprite_palette_index = sprite.attributes.palette;
+                        sprite_priority = sprite.attributes.priority;
+                        sprite_is_zero = (sprite_index == 0);
+                    }
+                }
+            }
+        }
+
+        return .{ 
+            .color_index = sprite_color_index, 
+            .palette_index = sprite_palette_index, 
+            .priority = sprite_priority, 
+            .is_sprite_zero = sprite_is_zero 
+        };
+    }
+
+    fn checkSprite0Hit(self: *PPU, x: u16, bg_color: u2, sprite_color: u2, sprite_is_zero: bool) void {
+        if (!self.registers.status.sprite0_hit and sprite_is_zero and
+            bg_color != 0 and sprite_color != 0 and
+            x < 255 and self.registers.mask.show_bg and self.registers.mask.show_sprites)
+        {
+            self.registers.status.sprite0_hit = true;
+        }
+    }
+
+    const PriorityResult = struct { palette_addr: u16 };
+    
+    fn resolvePixelPriority(bg_color: u2, bg_palette: u8, sprite_color: u2, sprite_palette: u8, sprite_priority: u1) PriorityResult {
+        var final_palette_addr: u16 = 0;
+
+        if (bg_color == 0 and sprite_color == 0) {
+            // Both transparent, use backdrop color
+            final_palette_addr = 0x3F00;
+        } else if (bg_color == 0 and sprite_color != 0) {
+            // Background transparent, show sprite
+            final_palette_addr = 0x3F10 + @as(u16, sprite_palette) * 4 + @as(u16, sprite_color);
+        } else if (bg_color != 0 and sprite_color == 0) {
+            // Sprite transparent, show background
+            final_palette_addr = 0x3F00 + @as(u16, bg_palette) * 4 + @as(u16, bg_color);
+        } else {
+            // Both opaque, check priority
+            if (sprite_priority == 0) {
+                // Sprite in front
+                final_palette_addr = 0x3F10 + @as(u16, sprite_palette) * 4 + @as(u16, sprite_color);
+            } else {
+                // Background in front
+                final_palette_addr = 0x3F00 + @as(u16, bg_palette) * 4 + @as(u16, bg_color);
+            }
+        }
+
+        return .{ .palette_addr = final_palette_addr };
+    }
+
+    pub fn renderPixel(self: *PPU, fb: *FrameBuffer) !void {
         // Don't render if PPU rendering is disabled
         if (!self.registers.mask.show_bg and !self.registers.mask.show_sprites) return;
 
         const x: u16 = @intCast(self.cycle - 1);
         const y: u16 = @intCast(self.scanline);
 
-        var bg_color_index: u2 = 0;
-        var bg_palette_index: u8 = 0;
-
         // Render background pixel
-        if (self.registers.mask.show_bg and (x >= 8 or self.registers.mask.show_bg_left)) {
-            // Get the current VRAM address (includes scroll information)
-            const v = self.registers.scroll_unit.v.read();
-
-            // Extract scroll components from v register
-            const coarse_x = v & 0x1F;
-            const coarse_y = (v >> 5) & 0x1F;
-            const nametable_x = (v >> 10) & 0x01;
-            const nametable_y = (v >> 11) & 0x01;
-            const fine_y = (v >> 12) & 0x07;
-
-            // Calculate tile coordinates
-            const tile_x = coarse_x;
-            const tile_y = coarse_y;
-
-            // Get nametable base address
-            const nametable_select = (nametable_y << 1) | nametable_x;
-            const nametable_base = 0x2000 + @as(u16, nametable_select) * 0x400;
-
-            const name_table_index = tile_y * 32 + tile_x;
-            const tile_id = self.vram.read(nametable_base + name_table_index);
-
-            // Calculate pixel position within the tile
-            // The cycle position determines which pixel we're fetching
-            const pixel_x: u3 = @intCast((self.cycle - 1) & 0x07);
-            const pixel_y: u3 = @intCast(fine_y);
-
-            const bg_table_addr: usize = if (self.registers.ctrl.background_table == 0) 0x0000 else 0x1000;
-            const chr_index = bg_table_addr + @as(usize, tile_id) * 16;
-
-            // Bounds check for CHR ROM access
-            if (chr_index + 8 + pixel_y < self.cartridge.chr_rom.len) {
-                const plane0 = self.cartridge.chr_rom[chr_index + pixel_y];
-                const plane1 = self.cartridge.chr_rom[chr_index + 8 + pixel_y];
-
-                const bit_index: u3 = 7 - pixel_x;
-                const bit0 = (plane0 >> bit_index) & 1;
-                const bit1 = (plane1 >> bit_index) & 1;
-                bg_color_index = @intCast((bit1 << 1) | bit0);
-
-                // Get attribute byte for palette selection
-                const attr_x = tile_x / 4;
-                const attr_y = tile_y / 4;
-                const attr_index = attr_y * 8 + attr_x;
-                const attr_addr = nametable_base + 0x03C0 + @as(u16, attr_index);
-                const attr_byte = self.vram.read(attr_addr);
-
-                const quad_x = (tile_x % 4) / 2;
-                const quad_y = (tile_y % 4) / 2;
-                const shift: u3 = @intCast((quad_y * 2 + quad_x) * 2);
-                const palette_number = (attr_byte >> shift) & 0b11;
-                bg_palette_index = @intCast(palette_number);
-            }
-        }
-
-        // Variables for sprite rendering
-        var sprite_color_index: u2 = 0;
-        var sprite_palette_index: u8 = 0;
-        var sprite_priority: u1 = 0;
-        var sprite_is_zero = false;
+        const bg = if (self.registers.mask.show_bg and (x >= 8 or self.registers.mask.show_bg_left))
+            self.renderBackgroundPixel(x, y)
+        else
+            BackgroundPixelResult{ .color_index = 0, .palette_index = 0 };
 
         // Render sprite pixel
-        if (self.registers.mask.show_sprites and (x >= 8 or self.registers.mask.show_sprites_left)) {
-            // Check each sprite in secondary OAM
-            for (0..self.secondary_oam.count) |i| {
-                const sprite = self.secondary_oam.sprites[i];
-                const sprite_index = self.secondary_oam.sprite_indices[i];
-
-                // Check if sprite covers this pixel
-                // Use wrapping arithmetic to handle sprites at screen edges
-                const sprite_end_x = sprite.x +% 8;
-                const sprite_visible = if (sprite_end_x > sprite.x)
-                    (x >= sprite.x and x < sprite_end_x)
-                else
-                    (x >= sprite.x or x < sprite_end_x); // Sprite wraps around screen
-
-                if (sprite_visible) {
-                    // In NES, sprite Y is the actual Y coordinate minus 1
-                    const sprite_y_actual = sprite.y +% 1;
-
-                    // Check if current scanline is within sprite bounds
-                    if (y < sprite_y_actual or y >= sprite_y_actual +% 8) continue;
-
-                    const sprite_pixel_x_temp = x -% sprite.x;
-                    const sprite_pixel_y_temp = y -% sprite_y_actual;
-
-                    // Ensure values are within valid range (should be guaranteed by checks above)
-                    if (sprite_pixel_x_temp >= 8 or sprite_pixel_y_temp >= 8) continue;
-
-                    var sprite_pixel_x: u3 = @intCast(sprite_pixel_x_temp);
-                    var sprite_pixel_y: u3 = @intCast(sprite_pixel_y_temp);
-
-                    // Apply horizontal flip
-                    if (sprite.attributes.flip_h == 1) {
-                        sprite_pixel_x = 7 - sprite_pixel_x;
-                    }
-
-                    // Apply vertical flip
-                    if (sprite.attributes.flip_v == 1) {
-                        sprite_pixel_y = 7 - sprite_pixel_y;
-                    }
-
-                    const sprite_table_addr: usize = if (self.registers.ctrl.sprite_table == 0) 0x0000 else 0x1000;
-                    const sprite_chr_index = sprite_table_addr + @as(usize, sprite.tile_index) * 16;
-
-                    // Bounds check for sprite CHR ROM access
-                    if (sprite_chr_index + 8 + sprite_pixel_y < self.cartridge.chr_rom.len) {
-                        const sprite_plane0 = self.cartridge.chr_rom[sprite_chr_index + sprite_pixel_y];
-                        const sprite_plane1 = self.cartridge.chr_rom[sprite_chr_index + 8 + sprite_pixel_y];
-
-                        const sprite_bit_index: u3 = 7 - sprite_pixel_x;
-                        const sbit0 = (sprite_plane0 >> sprite_bit_index) & 1;
-                        const sbit1 = (sprite_plane1 >> sprite_bit_index) & 1;
-                        const color = @as(u2, @intCast((sbit1 << 1) | sbit0));
-
-                        // If pixel is not transparent, use this sprite
-                        if (color != 0 and sprite_color_index == 0) {
-                            sprite_color_index = color;
-                            sprite_palette_index = sprite.attributes.palette;
-                            sprite_priority = sprite.attributes.priority;
-                            sprite_is_zero = (sprite_index == 0);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Determine which pixel to render (sprite or background)
-        var final_color_index: u2 = 0;
-        var final_palette_addr: u16 = 0;
+        const sprite = if (self.registers.mask.show_sprites and (x >= 8 or self.registers.mask.show_sprites_left))
+            self.renderSpritePixel(x, y)
+        else
+            SpritePixelResult{ .color_index = 0, .palette_index = 0, .priority = 0, .is_sprite_zero = false };
 
         // Sprite 0 hit detection
-        if (!self.registers.status.sprite0_hit and sprite_is_zero and
-            bg_color_index != 0 and sprite_color_index != 0 and
-            x < 255 and self.registers.mask.show_bg and self.registers.mask.show_sprites)
-        {
-            self.registers.status.sprite0_hit = true;
-        }
+        self.checkSprite0Hit(x, bg.color_index, sprite.color_index, sprite.is_sprite_zero);
 
-        // Priority logic
-        if (bg_color_index == 0 and sprite_color_index == 0) {
-            // Both transparent, use backdrop color
-            final_palette_addr = 0x3F00;
-        } else if (bg_color_index == 0 and sprite_color_index != 0) {
-            // Background transparent, show sprite
-            final_color_index = sprite_color_index;
-            final_palette_addr = 0x3F10 + @as(u16, sprite_palette_index) * 4 + @as(u16, sprite_color_index);
-        } else if (bg_color_index != 0 and sprite_color_index == 0) {
-            // Sprite transparent, show background
-            final_color_index = bg_color_index;
-            final_palette_addr = 0x3F00 + @as(u16, bg_palette_index) * 4 + @as(u16, bg_color_index);
-        } else {
-            // Both opaque, check priority
-            if (sprite_priority == 0) {
-                // Sprite in front
-                final_color_index = sprite_color_index;
-                final_palette_addr = 0x3F10 + @as(u16, sprite_palette_index) * 4 + @as(u16, sprite_color_index);
-            } else {
-                // Background in front
-                final_color_index = bg_color_index;
-                final_palette_addr = 0x3F00 + @as(u16, bg_palette_index) * 4 + @as(u16, bg_color_index);
-            }
-        }
+        // Priority resolution
+        const priority = resolvePixelPriority(
+            bg.color_index,
+            bg.palette_index,
+            sprite.color_index,
+            sprite.palette_index,
+            sprite.priority
+        );
 
         // Get final color from palette
-        const palette_index = self.vram.readPalette(final_palette_addr) & 0x3F;
+        const palette_index = self.vram.readPalette(priority.palette_addr) & 0x3F;
         const color = nes_palette.NES_PALETTE[palette_index];
 
         fb.setPixel(@intCast(x), @intCast(y), color);

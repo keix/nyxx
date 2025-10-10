@@ -60,7 +60,7 @@ pub const Bus = struct {
             0x4000...0x4007, 0x4015, 0x4017 => self.apu.write(addr, value),
             0x4014 => self.performOamDma(value),
             0x4016 => self.controllerWrite(value),
-            0x8000...0xFFFF => {},
+            0x8000...0xFFFF => self.cartridge.write(addr, value),
             else => {},
         }
     }
