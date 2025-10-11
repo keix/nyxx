@@ -63,7 +63,6 @@ pub const CPU = struct {
 
     fn reset(self: *CPU) void {
         self.registers.pc = self.bus.cartridge.getResetVector();
-        // std.debug.print("CPU reset: PC set to ${X:04}\n", .{self.registers.pc});
     }
 
     inline fn readMemory(self: *CPU, addr: u16) u8 {
@@ -79,10 +78,6 @@ pub const CPU = struct {
         self.checkNMI();
 
         const instr = self.fetch();
-        // if ((pc_before >= 0xFFD8 and pc_before < 0xFFE8) or (pc_before >= 0xEE90 and pc_before < 0xEEA0)) {  // Log relevant ranges
-        //     const opcode = self.readMemory(pc_before);
-        //     std.debug.print("CPU: PC=${X:04} opcode=${X:02} {s}\n", .{pc_before, opcode, @tagName(instr.mnemonic)});
-        // }
         self.execute(instr);
         return self.calculateNextCycles(instr);
     }
@@ -341,7 +336,6 @@ pub const CPU = struct {
         return result;
     }
 
-    // inline fn getAddress(self: *CPU, mode: Opcode.AddressingMode) u16 {
     fn getAddress(self: *CPU, mode: Opcode.AddressingMode) u16 {
         return switch (mode) {
             .zero_page => self.getZeroPage(),
@@ -394,7 +388,6 @@ pub const CPU = struct {
     }
 
     inline fn getZeroPageX(self: *CPU) u16 {
-        // return @as(u16, (self.fetchU8() + self.registers.x) & 0xFF);
         const offset: u16 = @as(u16, self.fetchU8()) + @as(u16, self.registers.x);
         return offset & 0xFF;
     }
