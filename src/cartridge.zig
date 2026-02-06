@@ -58,9 +58,9 @@ pub const Cartridge = struct {
             const last_bank_offset: usize = if (prg_size > 0x8000)
                 prg_size - 0x4000 // Last 16KB bank
             else if (prg_size == 0x8000)
-                @as(usize, 0) // 32KB ROM
+                0x4000 // 32KB ROM: vector is in upper bank ($C000-$FFFF)
             else
-                @as(usize, 0); // 16KB ROM
+                @as(usize, 0); // 16KB ROM (mirrored)
 
             const vector_offset = last_bank_offset + 0x3FFC;
             const low = prg_rom[vector_offset];
