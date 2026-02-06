@@ -106,7 +106,7 @@ pub const Cartridge = struct {
                 cart.mapper_interface = m.mapper();
             },
             else => {
-                std.debug.print("Unsupported mapper {}, defaulting to mapper 0\n", .{mapper});
+                // Unsupported mapper, defaulting to mapper 0
                 var m = try allocator.create(mapper_mod.Mapper0);
                 m.* = mapper_mod.Mapper0.init(prg_rom, chr_rom, &cart.chr_ram);
                 cart.mapper_impl = m;

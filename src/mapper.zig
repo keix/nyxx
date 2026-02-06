@@ -181,10 +181,6 @@ pub const Mapper1 = struct {
                     // Fix last bank at $C000, switch 16KB at $8000
                     if (addr < 0xC000) {
                         const offset = (addr - 0x8000) + (@as(u32, prg_bank_num) * 0x4000);
-                        if (addr >= 0x8E90 and addr <= 0x8EA0) {
-                            std.debug.print("MMC1 read bank {d}: addr=${X:04} offset=${X:05} value=${X:02}\n", 
-                                .{prg_bank_num, addr, offset, self.prg_rom[offset % self.prg_rom.len]});
-                        }
                         break :blk self.prg_rom[offset % self.prg_rom.len];
                     } else {
                         const last_bank = (self.prg_rom.len / 0x4000) - 1;

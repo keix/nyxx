@@ -5,15 +5,10 @@ const CPU = @import("6502.zig").CPU;
 const Cartridge = @import("cartridge.zig").Cartridge;
 const FrameBuffer = @import("ppu.zig").FrameBuffer;
 
-const SDLDevice = @import("devices/sdl.zig").Device;
-const WebGLDevice = @import("devices/webgl.zig").Device;
-
-const DeviceType = if (builtin.target.cpu.arch == .wasm32 and builtin.target.os.tag != .wasi)
-    WebGLDevice
-else if (builtin.target.os.tag == .wasi)
-    WebGLDevice
-else
-    SDLDevice;
+const DeviceType = blk: {
+    const is_wasm = builtin.target.cpu.arch == .wasm32 or builtin.target.os.tag == .wasi;
+    break :blk if (is_wasm) @import("devices/webgl.zig").Device else @import("devices/sdl.zig").Device;
+};
 
 // NES timing constants
 const TARGET_CYCLES_PER_FRAME = 29780; // NTSC: ~29780 cycles per frame
