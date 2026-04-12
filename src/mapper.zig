@@ -119,12 +119,6 @@ pub const Mapper1 = struct {
     pub const Mirroring = enum { OneScreenLower, OneScreenUpper, Vertical, Horizontal };
 
     pub fn init(prg_rom: []u8, chr_rom: []u8, chr_ram: []u8) Mapper1 {
-        // std.debug.print("MMC1 Init: PRG={d}KB, CHR={d}KB, CHR_RAM={d}KB\n", .{
-        //     prg_rom.len / 1024, chr_rom.len / 1024, chr_ram.len / 1024
-        // });
-        // std.debug.print("MMC1 initial state: control=${X:02}, prg_bank={d}, last_bank={d}\n", .{
-        //     0x0C, 0, (prg_rom.len / 0x4000) - 1
-        // });
         return .{
             .prg_rom = prg_rom,
             .chr_rom = chr_rom,
@@ -149,9 +143,7 @@ pub const Mapper1 = struct {
         // PRG RAM at $6000-$7FFF
         if (addr >= 0x6000 and addr < 0x8000) {
             if (self.prg_ram) |ram| {
-                const val = ram[addr - 0x6000];
-                // std.debug.print("MMC1 PRG RAM read: ${X:04} = ${X:02}\n", .{addr, val});
-                return val;
+                return ram[addr - 0x6000];
             }
             return 0;
         }
@@ -185,10 +177,6 @@ pub const Mapper1 = struct {
                     } else {
                         const last_bank = (self.prg_rom.len / 0x4000) - 1;
                         const offset = (addr - 0xC000) + (last_bank * 0x4000);
-                        // if ((addr >= 0xFFD8 and addr <= 0xFFDF) or (addr >= 0xEE90 and addr <= 0xEEA0)) {
-                        //     std.debug.print("MMC1 read last bank: addr=${X:04} bank={d} offset=${X:05} value=${X:02}\n", 
-                        //         .{addr, last_bank, offset, self.prg_rom[offset]});
-                        // }
                         break :blk self.prg_rom[offset];
                     }
                 },
@@ -205,14 +193,12 @@ pub const Mapper1 = struct {
         if (addr >= 0x6000 and addr < 0x8000) {
             if (self.prg_ram) |ram| {
                 ram[addr - 0x6000] = value;
-                // std.debug.print("MMC1 PRG RAM write: ${X:04} = ${X:02}\n", .{addr, value});
             }
             return;
         }
-        
+
         // MMC1 register writes
         if (addr >= 0x8000) {
-            // std.debug.print("MMC1 write: ${X:04} = ${X:02}\n", .{addr, value});
             // Reset shift register on write with bit 7 set
             if ((value & 0x80) != 0) {
                 self.shift_register = 0x10;
@@ -234,27 +220,14 @@ pub const Mapper1 = struct {
                 switch (reg_select) {
                     0 => { // $8000-$9FFF: Control
                         self.control = reg_value;
-                        // std.debug.print("MMC1 Control = ${X:02} (PRG mode={d}, CHR mode={d})\n", .{
-                        //     reg_value, (reg_value >> 2) & 0x03, (reg_value >> 4) & 0x01
-                        // });
-                        // Update mirroring
                         if (self.set_mirroring) |callback| {
                             const mirroring_mode = @as(Mirroring, @enumFromInt(reg_value & 0x03));
                             callback(mirroring_mode);
                         }
                     },
-                    1 => { // $A000-$BFFF: CHR bank 0
-                        self.chr_bank_0 = reg_value;
-                        // std.debug.print("MMC1 CHR bank 0 = ${X:02}\n", .{reg_value});
-                    },
-                    2 => { // $C000-$DFFF: CHR bank 1
-                        self.chr_bank_1 = reg_value;
-                        // std.debug.print("MMC1 CHR bank 1 = ${X:02}\n", .{reg_value});
-                    },
-                    3 => { // $E000-$FFFF: PRG bank
-                        self.prg_bank = reg_value;
-                        // std.debug.print("MMC1 PRG bank = ${X:02}\n", .{reg_value});
-                    },
+                    1 => self.chr_bank_0 = reg_value, // $A000-$BFFF: CHR bank 0
+                    2 => self.chr_bank_1 = reg_value, // $C000-$DFFF: CHR bank 1
+                    3 => self.prg_bank = reg_value, // $E000-$FFFF: PRG bank
                 }
             }
         }
