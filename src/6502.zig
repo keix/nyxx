@@ -195,9 +195,7 @@ pub const CPU = struct {
             .RRA => self.opRra(instr.addressing_mode),
             .DCP => self.opDcp(instr.addressing_mode),
             .ISB => self.opIsb(instr.addressing_mode),
-            else => {
-                // std.debug.print("Unimplemented mnemonic: {}\n", .{instr.mnemonic});
-            },
+            else => {},
         }
     }
 

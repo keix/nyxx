@@ -185,8 +185,6 @@ pub const Cartridge = struct {
             const offset = addr & 0x1FFF; // 8KB CHR RAM
             if (offset < self.chr_ram.len) {
                 self.chr_ram[offset] = value;
-            } else {
-                // std.debug.print("Attempted to write to CHR RAM out of bounds: 0x{X:04}\n", .{addr});
             }
         }
     }
@@ -208,8 +206,6 @@ pub const Cartridge = struct {
                 const offset = addr & 0x1FFF; // 8KB CHR RAM
                 if (offset < self.chr_ram.len) {
                     return self.chr_ram[offset];
-                } else {
-                    // std.debug.print("Attempted to read from CHR RAM out of bounds: 0x{X:04}\n", .{addr});
                 }
             }
         }

@@ -5,22 +5,28 @@ const Cartridge = @import("cartridge.zig").Cartridge;
 const Mirroring = @import("cartridge.zig").Mirroring;
 const nes_palette = @import("palette.zig");
 
+const SCREEN_WIDTH = 256;
 const VISIBLE_SCANLINES = 240;
 const CYCLES_PER_SCANLINE = 341;
 const SCANLINES_PER_FRAME = 262;
 
+const NAMETABLE_BASE = 0x2000;
+const ATTRIBUTE_OFFSET = 0x03C0;
+const PALETTE_BASE = 0x3F00;
+const SPRITE_PALETTE_BASE = 0x3F10;
+
 pub const FrameBuffer = struct {
-    pixels: [VISIBLE_SCANLINES * 256]u32 = [_]u32{0} ** (VISIBLE_SCANLINES * 256),
+    pixels: [VISIBLE_SCANLINES * SCREEN_WIDTH]u32 = [_]u32{0} ** (VISIBLE_SCANLINES * 256),
 
     pub fn setPixel(self: *FrameBuffer, x: u8, y: u8, color: u32) void {
-        if (y < VISIBLE_SCANLINES and x < 256) {
-            self.pixels[@as(usize, y) * 256 + x] = color;
+        if (y < VISIBLE_SCANLINES and x < SCREEN_WIDTH) {
+            self.pixels[@as(usize, y) * SCREEN_WIDTH + x] = color;
         }
     }
 
     pub fn getPixel(self: *FrameBuffer, x: u8, y: u8) u32 {
-        if (y < VISIBLE_SCANLINES and x < 256) {
-            return self.pixels[@as(usize, y) * 256 + x];
+        if (y < VISIBLE_SCANLINES and x < SCREEN_WIDTH) {
+            return self.pixels[@as(usize, y) * SCREEN_WIDTH + x];
         }
         return 0;
     }
@@ -515,7 +521,7 @@ pub const PPU = struct {
 
         // Get nametable base address
         const nametable_select = (nametable_y << 1) | nametable_x;
-        const nametable_base = 0x2000 + @as(u16, nametable_select) * 0x400;
+        const nametable_base = NAMETABLE_BASE + @as(u16, nametable_select) * 0x400;
 
         const name_table_index = tile_y * 32 + tile_x;
         const tile_id = self.vram.read(nametable_base + name_table_index);
@@ -541,7 +547,7 @@ pub const PPU = struct {
             const attr_x = tile_x / 4;
             const attr_y = tile_y / 4;
             const attr_index = attr_y * 8 + attr_x;
-            const attr_addr = nametable_base + 0x03C0 + @as(u16, attr_index);
+            const attr_addr = nametable_base + ATTRIBUTE_OFFSET + @as(u16, attr_index);
             const attr_byte = self.vram.read(attr_addr);
 
             const quad_x = (tile_x % 4) / 2;
@@ -643,21 +649,21 @@ pub const PPU = struct {
 
         if (bg_color == 0 and sprite_color == 0) {
             // Both transparent, use backdrop color
-            final_palette_addr = 0x3F00;
+            final_palette_addr = PALETTE_BASE;
         } else if (bg_color == 0 and sprite_color != 0) {
             // Background transparent, show sprite
-            final_palette_addr = 0x3F10 + @as(u16, sprite_palette) * 4 + @as(u16, sprite_color);
+            final_palette_addr = SPRITE_PALETTE_BASE + @as(u16, sprite_palette) * 4 + @as(u16, sprite_color);
         } else if (bg_color != 0 and sprite_color == 0) {
             // Sprite transparent, show background
-            final_palette_addr = 0x3F00 + @as(u16, bg_palette) * 4 + @as(u16, bg_color);
+            final_palette_addr = PALETTE_BASE + @as(u16, bg_palette) * 4 + @as(u16, bg_color);
         } else {
             // Both opaque, check priority
             if (sprite_priority == 0) {
                 // Sprite in front
-                final_palette_addr = 0x3F10 + @as(u16, sprite_palette) * 4 + @as(u16, sprite_color);
+                final_palette_addr = SPRITE_PALETTE_BASE + @as(u16, sprite_palette) * 4 + @as(u16, sprite_color);
             } else {
                 // Background in front
-                final_palette_addr = 0x3F00 + @as(u16, bg_palette) * 4 + @as(u16, bg_color);
+                final_palette_addr = PALETTE_BASE + @as(u16, bg_palette) * 4 + @as(u16, bg_color);
             }
         }
 
